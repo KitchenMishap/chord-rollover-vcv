@@ -20,6 +20,7 @@ struct ChordRollover : Module {
 	};
 	enum LightId {
 		EXAMPLE_LIGHT,
+		ROLLOVER_LIGHT,
 		LIGHTS_LEN
 	};
 
@@ -61,8 +62,8 @@ struct ChordRolloverWidget : ModuleWidget {
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(7, 113)), module, ChordRollover::VOCT_OUTPUT));
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(width - 7, 113)), module, ChordRollover::GATE_OUTPUT));
 
-
 		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(7.325, 70.813)), module, ChordRollover::EXAMPLE_LIGHT));
+		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(Vec(width - 7, 87)), module, ChordRollover::ROLLOVER_LIGHT));
 
 		// mm2px(Vec(10.0, 10.0))
 		addChild(createWidget<Widget>(mm2px(Vec(2.684, 81.945))));
