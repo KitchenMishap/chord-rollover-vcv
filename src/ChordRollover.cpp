@@ -28,7 +28,11 @@ int semiToSemiBaseOctave(int semi)
 }
 int semiToOctaveShift(int semi)
 {
-	return 12 * (semi / 12);
+	// Hacky but works
+	// Solves the problem that integer division rounds towards zero (not always down)
+	const int bigNumberOfOctaves = 8;		// The idea is to make semi positive when you add this
+	int octave = (semi + bigNumberOfOctaves * 12) / 12;
+	return 12 * octave - 12 * bigNumberOfOctaves;
 }
 int semiToNoteWithinKeySig(int semi, int key, std::string modeString, bool *outOfKey)
 {
@@ -199,10 +203,8 @@ struct ChordRollover : Module {
 		float voct = inputs[VOCT_INPUT].getVoltage();
 		int semi = voltageToNearestSemi(voct);
 
-		semi = semi % 12;
-		if( semi < 0 ) {
-			semi += 12;
-		}
+		int octSemis = semiToOctaveShift(semi);
+		semi = semiToSemiBaseOctave(semi);
 
 		bool outOfKey = false;
 		int note = semiToNoteWithinKeySig(semi,key,modeString,&outOfKey);
@@ -219,7 +221,7 @@ struct ChordRollover : Module {
 		std::vector<int> semis;
 		for( int noteIndex = 0; noteIndex < numNotes; noteIndex++ ) {
 			int thisSemi = noteToSemiWithinKeySig(notes[noteIndex], key, modeString);
-			semis.push_back(thisSemi);
+			semis.push_back(thisSemi + octSemis);
 		}
 
 		outputs[VOCT_OUTPUT].setChannels(numNotes);
