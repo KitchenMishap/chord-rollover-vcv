@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="15.24mm"
+   height="128.5mm"
+   viewBox="0 0 15.24 128.5"
+   version="1.1"
+   id="svg1"
+   inkscape:version="1.4.2 (f4327f4, 2025-05-13)"
+   sodipodi:docname="InkscapeExampleVcv.svg"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="mm"
+     inkscape:zoom="1.4142136"
+     inkscape:cx="270.11479"
+     inkscape:cy="214.96046"
+     inkscape:window-width="1920"
+     inkscape:window-height="1130"
+     inkscape:window-x="-6"
+     inkscape:window-y="1433"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="layer2" />
+  <defs
+     id="defs1" />
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1">
+    <rect
+       style="fill:#e6e6e6;stroke-width:0.264583"
+       id="rect1"
+       width="15.24"
+       height="128.5"
+       x="-0.18708859"
+       y="-0.18708859"
+       inkscape:label="Background" />
+  </g>
+  <g
+     inkscape:groupmode="layer"
+     id="layer2"
+     inkscape:label="components"
+     style="display:none">
+    <circle
+       style="fill:#ff00ff;stroke-width:0.264583"
+       id="path5"
+       cx="7.3254452"
+       cy="70.813065"
+       r="5"
+       inkscape:label="EXAMPLE" />
+    <circle
+       style="fill:#0000ff;stroke-width:0.264583"
+       id="path4"
+       cx="7.6060791"
+       cy="52.759003"
+       r="5"
+       inkscape:label="EXAMPLE" />
+    <circle
+       style="fill:#00ff00;stroke-width:0.264583"
+       id="path3"
+       cx="7.5125341"
+       cy="35.35976"
+       r="5"
+       inkscape:label="EXAMPLE" />
+    <circle
+       style="fill:#ff0000;stroke-width:0.264583"
+       id="path2"
+       cx="7.7351923"
+       cy="16.276714"
+       r="5"
+       inkscape:label="EXAMPLE" />
+    <rect
+       style="fill:#ffff00;stroke-width:0.264583"
+       id="rect5"
+       width="10"
+       height="10"
+       x="2.6837981"
+       y="81.944832"
+       inkscape:label="EXAMPLE" />
+  </g>
+</svg>

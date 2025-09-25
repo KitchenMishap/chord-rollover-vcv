@@ -12,5 +12,14 @@
   "sourceUrl": "github.com/KitchenMishap/chord-rollover-vcv",
   "donateUrl": "",
   "changelogUrl": "",
-  "modules": []
+  "modules": [
+    {
+      "slug": "ChordRollover",
+      "name": "ChordRollover",
+      "description": "Generates chord pitches in a keysig from a mono pitch with keypress rollover portamento slide",
+      "tags": [
+        "polyphonic"
+      ]
+    }
+  ]
 }
