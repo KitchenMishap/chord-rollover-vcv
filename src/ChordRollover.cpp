@@ -176,6 +176,8 @@ struct ChordRollover : Module {
 	dsp::SchmittTrigger trigger;
 	dsp::PulseGenerator pulse;
 	float prevPitch = 0.0;
+	std::vector<float> fromPitches;
+	std::vector<float> toPitches;
 
 	ChordRollover() {
 		INFO("Running Tests...");
@@ -193,7 +195,7 @@ struct ChordRollover : Module {
 		configOutput(GATE_OUTPUT, "(Poly) Gate");
 	}
 
-	void playChord() {
+	std::vector<float> constructChord() {
 		int key = (int)(params[KEYSIG_PARAM].getValue());
 		int mode = 0;	// Not implemented yet
 		std::string modeString = generateModeString(mode);
@@ -205,23 +207,32 @@ struct ChordRollover : Module {
 		int note = semiToNoteWithinKeySig(semi, key, modeString, &outOfKey);
 		int firstInversion = outOfKey ? 1 : 0;
 
-		int numNotes = (int)(params[CHORD_PARAM].getValue());
+		unsigned int numNotes = (int)(params[CHORD_PARAM].getValue());
 
 		std::vector<int> notes;
-		for( int noteIndex = 0; noteIndex < numNotes; noteIndex++ ) {
+		for( unsigned int noteIndex = 0; noteIndex < numNotes; noteIndex++ ) {
 			int thisNote = note + chordNotes[noteIndex + firstInversion];
 			notes.push_back(thisNote);
 		}
 
 		std::vector<int> semis;
-		for( int noteIndex = 0; noteIndex < numNotes; noteIndex++ ) {
+		for( unsigned int noteIndex = 0; noteIndex < numNotes; noteIndex++ ) {
 			int thisSemi = noteToSemiWithinKeySig(notes[noteIndex], key, modeString);
 			semis.push_back(thisSemi);
 		}
 
-		outputs[VOCT_OUTPUT].setChannels(numNotes);
-		for( int noteIndex = 0; noteIndex < numNotes; noteIndex++ ) {
-			outputs[VOCT_OUTPUT].setVoltage((float)(semis[noteIndex]) / 12.f , noteIndex);
+		std::vector<float> pitches;
+		for( unsigned int noteIndex = 0; noteIndex < numNotes; noteIndex++ ) {
+			pitches.push_back((float)(semis[noteIndex]) / 12.f);
+		}
+		return pitches;
+	}
+
+	void playChord(std::vector<float> pitches)
+	{
+		outputs[VOCT_OUTPUT].setChannels(pitches.size());
+		for( unsigned int i=0; i<pitches.size(); i++ ) {
+			outputs[VOCT_OUTPUT].setVoltage(pitches[i], i);
 		}
 	}
 
@@ -253,8 +264,13 @@ struct ChordRollover : Module {
 			outputs[GATE_OUTPUT].setVoltage(gate, i);
 		}
 
-		if( gateOn || pitchChange ) {
-			playChord();
+		if( gateOn ) {
+			fromPitches = constructChord();
+			playChord(fromPitches);
+		}
+		if( pitchChange ) {
+			toPitches = constructChord();
+			playChord(toPitches);
 		}
 	}
 };
