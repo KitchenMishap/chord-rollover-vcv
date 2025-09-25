@@ -2,6 +2,15 @@
 
 const char* whiteNoteIntervals = "TTSTTTS";
 
+int niceModulo(int x, int y)
+{
+	int z = x % y;
+	if( z >=0 ) {
+		return z;
+	}
+	return z + y;
+}
+
 std::string generateModeString(int mode)
 {
 	assert( mode >= 0 );
@@ -14,65 +23,57 @@ std::string generateModeString(int mode)
 	result[7] = '\0';
 	return result;
 }
+
 int voltageToNearestSemi(float voltage)
 {
 	return (int)(round(voltage * 12.f));
 }
-int semiToSemiBaseOctave(int semi)
-{
-	int mod = semi % 12;
-	if( mod < 0 ) {
-		mod += 12;
-	}
-	return mod;
-}
-int semiToOctaveShift(int semi)
-{
-	// Hacky but works
-	// Solves the problem that integer division rounds towards zero (not always down)
-	const int bigNumberOfOctaves = 8;		// The idea is to make semi positive when you add this
-	int octave = (semi + bigNumberOfOctaves * 12) / 12;
-	return 12 * octave - 12 * bigNumberOfOctaves;
-}
+
+// semi can be negative
+// returns a note that also incorporates the octave
 int semiToNoteWithinKeySig(int semi, int key, std::string modeString, bool *outOfKey)
 {
-	assert(semi >= 0);
-	assert(semi <= 11);
 	assert(key >= 0);
 	assert(key <= 11);
 	assert(modeString[7] == '\0');
 
 	int semiToTry = key;
 	*outOfKey = false;
+	int semiModulo12 = niceModulo(semi, 12);
  	for( int noteToTry = 0; noteToTry <= 6; noteToTry++ ) {
-		if( semi == semiToTry ) {
-			return noteToTry;
+		if( semiModulo12 == niceModulo(semiToTry, 12) ) {
+			// Found a matching note, now find the octave
+			for( int octave = -10; octave < 10; octave++ ) {
+				if( semi == semiToTry + octave * 12 ) {
+					return noteToTry + octave * 7;
+				}
+			}
 		}
 		if( modeString[noteToTry] == 'T' ) {
 			semiToTry += 2;
 		} else {
 			semiToTry += 1;
 		}
-		semiToTry = semiToTry % 12;
 	}
 	// No exact match. Find the match that works when we start a semi lower...
 	*outOfKey = true;
 	semiToTry = key;
-	if( semi == 0 ) {
-		semi = 11;
-	} else {
-		semi -= 1;
-	}
+	semi -= 1;
+	semiModulo12 = niceModulo(semi, 12);
 	for( int noteToTry = 0; noteToTry <= 6; noteToTry++ ) {
-		if( semi == semiToTry ) {
-			return noteToTry;
+		if( semiModulo12 == niceModulo(semiToTry, 12) ) {
+			// Found a matching note, now find the octave
+			for( int octave = -10; octave < 10; octave++ ) {
+				if( semi == semiToTry + octave * 12 ) {
+					return noteToTry + octave * 7;
+				}
+			}
 		}
 		if( modeString[noteToTry] == 'T' ) {
 			semiToTry += 2;
 		} else {
 			semiToTry += 1;
 		}
-		semiToTry = semiToTry % 12;
 	}
 	// That didn't match either. Impossible!
 	assert(false);
@@ -82,6 +83,11 @@ int semiToNoteWithinKeySig(int semi, int key, std::string modeString, bool *outO
 int noteToSemiWithinKeySig(int note, int key, std::string modeString)
 {
 	int semi = key;
+	// First shift by whole octaves
+	while( note < 0 ) {
+		semi -= 12;
+		note += 7;
+	}
 	for( int stepNote = 1; stepNote <= note; stepNote++ ) {
 		int modeIndex = (stepNote -1) % 7 ;
 		if( modeString[modeIndex] == 'T' ) {
@@ -99,8 +105,8 @@ void testKeyMode(int key, int mode)
 	for( int semi = 0; semi <= 11; semi++ ) {
 		bool outOfKey = false;
 		int note = semiToNoteWithinKeySig(semi, key, modeString, &outOfKey);
-		assert(note >= 0);
-		assert(note <= 6);
+		int semiCalc = noteToSemiWithinKeySig(note, key, modeString);
+		assert(semiCalc == semi || outOfKey);
 	}
 }
 
@@ -111,14 +117,6 @@ void runTests()
 	assert(voltageToNearestSemi(-1.f) == -12);
 	assert(voltageToNearestSemi(1.f / 12.f) == 1);
 	assert(voltageToNearestSemi(11.f / 12.f) == 11);
-	assert(semiToSemiBaseOctave(0) == 0);
-	assert(semiToSemiBaseOctave(11) == 11);
-	assert(semiToSemiBaseOctave(12) == 0);
-	assert(semiToSemiBaseOctave(-11) == 1);
-	assert(semiToSemiBaseOctave(-12) == 0);
-	assert(semiToOctaveShift(0) == 0);
-	assert(semiToOctaveShift(12) == 12);
-	assert(semiToOctaveShift(-12) == -12);
 
 	for( int key = 0; key < 12; key++ )
 	{
@@ -136,10 +134,10 @@ void runTests()
 	assert(outOfKey==true);
 	assert(semiToNoteWithinKeySig(2,0,modeString,&outOfKey)==1);	// D in C Major Ionian
 	assert(outOfKey==false);
-	assert(semiToNoteWithinKeySig(9,11,modeString,&outOfKey)==5);	// A in B Major Ionian
+	assert(semiToNoteWithinKeySig(9,11,modeString,&outOfKey)==5-7);	// A in B Major Ionian
 	assert(outOfKey==true);
 	modeString = generateModeString(1);
-	assert(semiToNoteWithinKeySig(9,11,modeString,&outOfKey)==6);	// A in B Dorian
+	assert(semiToNoteWithinKeySig(9,11,modeString,&outOfKey)==6-7);	// A in B Dorian
 	assert(outOfKey==false);
 }
 
@@ -203,11 +201,8 @@ struct ChordRollover : Module {
 		float voct = inputs[VOCT_INPUT].getVoltage();
 		int semi = voltageToNearestSemi(voct);
 
-		int octSemis = semiToOctaveShift(semi);
-		semi = semiToSemiBaseOctave(semi);
-
 		bool outOfKey = false;
-		int note = semiToNoteWithinKeySig(semi,key,modeString,&outOfKey);
+		int note = semiToNoteWithinKeySig(semi, key, modeString, &outOfKey);
 		int firstInversion = outOfKey ? 1 : 0;
 
 		int numNotes = (int)(params[CHORD_PARAM].getValue());
@@ -221,7 +216,7 @@ struct ChordRollover : Module {
 		std::vector<int> semis;
 		for( int noteIndex = 0; noteIndex < numNotes; noteIndex++ ) {
 			int thisSemi = noteToSemiWithinKeySig(notes[noteIndex], key, modeString);
-			semis.push_back(thisSemi + octSemis);
+			semis.push_back(thisSemi);
 		}
 
 		outputs[VOCT_OUTPUT].setChannels(numNotes);
