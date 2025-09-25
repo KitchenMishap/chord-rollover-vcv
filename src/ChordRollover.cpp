@@ -1,17 +1,18 @@
 #include "plugin.hpp"
 
-const char* whiteNoteIntervals="TTSTTTS";
+const char* whiteNoteIntervals = "TTSTTTS";
 
-char *generateModeString(int mode, char out[8])
+std::string generateModeString(int mode)
 {
 	assert( mode >= 0 );
 	assert( mode < 7 );
 
+	std::string result = "0123456\0";
 	for( int i=0; i<7; i++ ) {
-		out[i] = whiteNoteIntervals[(i+ mode) % 7];
+		result[i] = whiteNoteIntervals[(i+ mode) % 7];
 	}
-	out[7] = '\0';
-	return out;
+	result[7] = '\0';
+	return result;
 }
 int voltageToNearestSemi(float voltage)
 {
@@ -29,17 +30,14 @@ int semiToOctaveShift(int semi)
 {
 	return 12 * (semi / 12);
 }
-int semiToNoteWithinKeySig(int semi, int key, int mode, bool *outOfKey)
+int semiToNoteWithinKeySig(int semi, int key, std::string modeString, bool *outOfKey)
 {
 	assert(semi >= 0);
 	assert(semi <= 11);
 	assert(key >= 0);
 	assert(key <= 11);
-	assert(mode >= 0);
-	assert(mode <= 6);
+	assert(modeString[7] == '\0');
 
-	char modeString[8];
-	generateModeString(mode, modeString);
 	int semiToTry = key;
 	*outOfKey = false;
  	for( int noteToTry = 0; noteToTry <= 6; noteToTry++ ) {
@@ -77,13 +75,26 @@ int semiToNoteWithinKeySig(int semi, int key, int mode, bool *outOfKey)
 	return 0;
 }
 
+int noteToSemiWithinKeySig(int note, int key, std::string modeString)
+{
+	int semi = key;
+	for( int stepNote = 1; stepNote <= note; stepNote++ ) {
+		int modeIndex = (stepNote -1) % 7 ;
+		if( modeString[modeIndex] == 'T' ) {
+			semi += 2;
+		} else {
+			semi += 1;
+		}
+	}
+	return semi;
+}
+
 void testKeyMode(int key, int mode)
 {
-	char result[8];
-	generateModeString(mode, result);
+	std::string modeString = generateModeString(mode);
 	for( int semi = 0; semi <= 11; semi++ ) {
 		bool outOfKey = false;
-		int note = semiToNoteWithinKeySig(semi, key, mode, &outOfKey);
+		int note = semiToNoteWithinKeySig(semi, key, modeString, &outOfKey);
 		assert(note >= 0);
 		assert(note <= 6);
 	}
@@ -114,17 +125,21 @@ void runTests()
 	}
 
 	bool outOfKey = false;
-	assert(semiToNoteWithinKeySig(0,0,0,&outOfKey)==0);	// C in C Major Ionian
+	std::string modeString = generateModeString(0);
+	assert(semiToNoteWithinKeySig(0,0,modeString,&outOfKey)==0);	// C in C Major Ionian
 	assert(outOfKey==false);
-	assert(semiToNoteWithinKeySig(1,0,0,&outOfKey)==0);	// C# in C Major Ionian
+	assert(semiToNoteWithinKeySig(1,0,modeString,&outOfKey)==0);	// C# in C Major Ionian
 	assert(outOfKey==true);
-	assert(semiToNoteWithinKeySig(2,0,0,&outOfKey)==1);	// D in C Major Ionian
+	assert(semiToNoteWithinKeySig(2,0,modeString,&outOfKey)==1);	// D in C Major Ionian
 	assert(outOfKey==false);
-	assert(semiToNoteWithinKeySig(9,11,0,&outOfKey)==5);	// A in B Major Ionian
+	assert(semiToNoteWithinKeySig(9,11,modeString,&outOfKey)==5);	// A in B Major Ionian
 	assert(outOfKey==true);
-	assert(semiToNoteWithinKeySig(9,11,1,&outOfKey)==6);	// A in B Dorian
+	modeString = generateModeString(1);
+	assert(semiToNoteWithinKeySig(9,11,modeString,&outOfKey)==6);	// A in B Dorian
 	assert(outOfKey==false);
 }
+
+int chordNotes[8] = {0,2,4,7,9,11,14,16};	// Room for a heptad plus first inversion
 
 struct ChordRollover : Module {
 	enum ParamId {
@@ -176,6 +191,43 @@ struct ChordRollover : Module {
 		configOutput(GATE_OUTPUT, "(Poly) Gate");
 	}
 
+	void playChord() {
+		int key = (int)(params[KEYSIG_PARAM].getValue());
+		int mode = 0;	// Not implemented yet
+		std::string modeString = generateModeString(mode);
+
+		float voct = inputs[VOCT_INPUT].getVoltage();
+		int semi = voltageToNearestSemi(voct);
+
+		semi = semi % 12;
+		if( semi < 0 ) {
+			semi += 12;
+		}
+
+		bool outOfKey = false;
+		int note = semiToNoteWithinKeySig(semi,key,modeString,&outOfKey);
+		int firstInversion = outOfKey ? 1 : 0;
+
+		int numNotes = (int)(params[CHORD_PARAM].getValue());
+
+		std::vector<int> notes;
+		for( int noteIndex = 0; noteIndex < numNotes; noteIndex++ ) {
+			int thisNote = note + chordNotes[noteIndex + firstInversion];
+			notes.push_back(thisNote);
+		}
+
+		std::vector<int> semis;
+		for( int noteIndex = 0; noteIndex < numNotes; noteIndex++ ) {
+			int thisSemi = noteToSemiWithinKeySig(notes[noteIndex], key, modeString);
+			semis.push_back(thisSemi);
+		}
+
+		outputs[VOCT_OUTPUT].setChannels(numNotes);
+		for( int noteIndex = 0; noteIndex < numNotes; noteIndex++ ) {
+			outputs[VOCT_OUTPUT].setVoltage((float)(semis[noteIndex]) / 12.f , noteIndex);
+		}
+	}
+
 	void process(const ProcessArgs& args) override {
 		// Has the gate been triggered this sample?
 		float gateV = inputs[GATE_INPUT].getVoltage();
@@ -196,6 +248,17 @@ struct ChordRollover : Module {
 		}
 		bool light = pulse.process(args.sampleTime);
 		lights[ROLLOVER_LIGHT].setBrightness(light ? 1.f : 0.f);
+
+		float gate = inputs[GATE_INPUT].getVoltage();
+		int numNotes = (int)(params[CHORD_PARAM].getValue());
+		outputs[GATE_OUTPUT].setChannels(numNotes);
+		for( int i=0; i<numNotes; i++ ) {
+			outputs[GATE_OUTPUT].setVoltage(gate, i);
+		}
+
+		if( gateOn || pitchChange ) {
+			playChord();
+		}
 	}
 };
 
@@ -228,6 +291,5 @@ struct ChordRolloverWidget : ModuleWidget {
 		addChild(createWidget<Widget>(mm2px(Vec(2.684, 81.945))));
 	}
 };
-
 
 Model* modelChordRollover = createModel<ChordRollover, ChordRolloverWidget>("ChordRollover");
