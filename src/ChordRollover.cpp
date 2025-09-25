@@ -31,6 +31,10 @@ struct ChordRollover : Module {
 		HALFSINE_PROFILE
 	};
 
+	dsp::SchmittTrigger trigger;
+	dsp::PulseGenerator pulse;
+	float prevPitch = 0.0;
+
 	ChordRollover() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 		configSwitch(KEYSIG_PARAM, 0.f, 11.f, 0.f, "Key Signature", {"C", "C♯/D♭", "D", "D♯/E♭", "E", "F", "F♯/G♭", "G", "G♯/A♭", "A", "A♯/B♭", "B"});
@@ -44,9 +48,27 @@ struct ChordRollover : Module {
 	}
 
 	void process(const ProcessArgs& args) override {
+		// Has the gate been triggered this sample?
+		float gateV = inputs[GATE_INPUT].getVoltage();
+		auto tc = trigger.processEvent(gateV, 0.1, 1.0);
+		bool gateOn = (tc==dsp::SchmittTrigger::TRIGGERED);
+
+		// Has the pitch changed more than 0.5 semitones this sample?
+		float pitchV = inputs[VOCT_INPUT].getVoltage();
+		bool pitchChange = abs(pitchV - prevPitch) > 1.f / 12.f / 2.f;
+		prevPitch = pitchV;
+
+		// Has the pitch changed without a gate trigger?
+		bool rollover = pitchChange && !gateOn;
+
+		// If so, flash the light
+		if( rollover ) {
+			pulse.trigger(0.1f);
+		}
+		bool light = pulse.process(args.sampleTime);
+		lights[ROLLOVER_LIGHT].setBrightness(light ? 1.f : 0.f);
 	}
 };
-
 
 struct ChordRolloverWidget : ModuleWidget {
 	ChordRolloverWidget(ChordRollover* module) {
