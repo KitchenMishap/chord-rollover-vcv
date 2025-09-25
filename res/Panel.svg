@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<!-- Created with Inkscape (http://www.inkscape.org/) -->
+<!-- MANUALLY EDITED AFTER Created with Inkscape (http://www.inkscape.org/) -->
 
 <svg
    width="15.24mm"
@@ -46,47 +46,5 @@
        x="-0.18708859"
        y="-0.18708859"
        inkscape:label="Background" />
-  </g>
-  <g
-     inkscape:groupmode="layer"
-     id="layer2"
-     inkscape:label="components"
-     style="display:none">
-    <circle
-       style="fill:#ff00ff;stroke-width:0.264583"
-       id="path5"
-       cx="7.3254452"
-       cy="70.813065"
-       r="5"
-       inkscape:label="EXAMPLE" />
-    <circle
-       style="fill:#0000ff;stroke-width:0.264583"
-       id="path4"
-       cx="7.6060791"
-       cy="52.759003"
-       r="5"
-       inkscape:label="EXAMPLE" />
-    <circle
-       style="fill:#00ff00;stroke-width:0.264583"
-       id="path3"
-       cx="7.5125341"
-       cy="35.35976"
-       r="5"
-       inkscape:label="EXAMPLE" />
-    <circle
-       style="fill:#ff0000;stroke-width:0.264583"
-       id="path2"
-       cx="7.7351923"
-       cy="16.276714"
-       r="5"
-       inkscape:label="EXAMPLE" />
-    <rect
-       style="fill:#ffff00;stroke-width:0.264583"
-       id="rect5"
-       width="10"
-       height="10"
-       x="2.6837981"
-       y="81.944832"
-       inkscape:label="EXAMPLE" />
   </g>
 </svg>
