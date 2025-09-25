@@ -1,0 +1,16 @@
+{
+  "slug": "ChordRolloverPlugin",
+  "name": "ChordRolloverPlugin",
+  "version": "2.0.0",
+  "license": "MIT",
+  "brand": "Kitchen Mishap",
+  "author": "Nigel Sharp",
+  "authorEmail": "hello@kitchenmishap.art",
+  "authorUrl": "www.kitchenmishap.art",
+  "pluginUrl": "github.com/KitchenMishap/chord-rollover-vcv",
+  "manualUrl": "github.com/KitchenMishap/chord-rollover-vcv",
+  "sourceUrl": "github.com/KitchenMishap/chord-rollover-vcv",
+  "donateUrl": "",
+  "changelogUrl": "",
+  "modules": []
+}
