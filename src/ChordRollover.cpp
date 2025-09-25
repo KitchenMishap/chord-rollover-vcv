@@ -1,5 +1,130 @@
 #include "plugin.hpp"
 
+const char* whiteNoteIntervals="TTSTTTS";
+
+char *generateModeString(int mode, char out[8])
+{
+	assert( mode >= 0 );
+	assert( mode < 7 );
+
+	for( int i=0; i<7; i++ ) {
+		out[i] = whiteNoteIntervals[(i+ mode) % 7];
+	}
+	out[7] = '\0';
+	return out;
+}
+int voltageToNearestSemi(float voltage)
+{
+	return (int)(round(voltage * 12.f));
+}
+int semiToSemiBaseOctave(int semi)
+{
+	int mod = semi % 12;
+	if( mod < 0 ) {
+		mod += 12;
+	}
+	return mod;
+}
+int semiToOctaveShift(int semi)
+{
+	return 12 * (semi / 12);
+}
+int semiToNoteWithinKeySig(int semi, int key, int mode, bool *outOfKey)
+{
+	assert(semi >= 0);
+	assert(semi <= 11);
+	assert(key >= 0);
+	assert(key <= 11);
+	assert(mode >= 0);
+	assert(mode <= 6);
+
+	char modeString[8];
+	generateModeString(mode, modeString);
+	int semiToTry = key;
+	*outOfKey = false;
+ 	for( int noteToTry = 0; noteToTry <= 6; noteToTry++ ) {
+		if( semi == semiToTry ) {
+			return noteToTry;
+		}
+		if( modeString[noteToTry] == 'T' ) {
+			semiToTry += 2;
+		} else {
+			semiToTry += 1;
+		}
+		semiToTry = semiToTry % 12;
+	}
+	// No exact match. Find the match that works when we start a semi lower...
+	*outOfKey = true;
+	semiToTry = key;
+	if( semi == 0 ) {
+		semi = 11;
+	} else {
+		semi -= 1;
+	}
+	for( int noteToTry = 0; noteToTry <= 6; noteToTry++ ) {
+		if( semi == semiToTry ) {
+			return noteToTry;
+		}
+		if( modeString[noteToTry] == 'T' ) {
+			semiToTry += 2;
+		} else {
+			semiToTry += 1;
+		}
+		semiToTry = semiToTry % 12;
+	}
+	// That didn't match either. Impossible!
+	assert(false);
+	return 0;
+}
+
+void testKeyMode(int key, int mode)
+{
+	char result[8];
+	generateModeString(mode, result);
+	for( int semi = 0; semi <= 11; semi++ ) {
+		bool outOfKey = false;
+		int note = semiToNoteWithinKeySig(semi, key, mode, &outOfKey);
+		assert(note >= 0);
+		assert(note <= 6);
+	}
+}
+
+void runTests()
+{
+	assert(voltageToNearestSemi(0.f) == 0);
+	assert(voltageToNearestSemi(1.f) == 12);
+	assert(voltageToNearestSemi(-1.f) == -12);
+	assert(voltageToNearestSemi(1.f / 12.f) == 1);
+	assert(voltageToNearestSemi(11.f / 12.f) == 11);
+	assert(semiToSemiBaseOctave(0) == 0);
+	assert(semiToSemiBaseOctave(11) == 11);
+	assert(semiToSemiBaseOctave(12) == 0);
+	assert(semiToSemiBaseOctave(-11) == 1);
+	assert(semiToSemiBaseOctave(-12) == 0);
+	assert(semiToOctaveShift(0) == 0);
+	assert(semiToOctaveShift(12) == 12);
+	assert(semiToOctaveShift(-12) == -12);
+
+	for( int key = 0; key < 12; key++ )
+	{
+		for( int mode = 0; mode < 7; mode++ )
+		{
+			testKeyMode(key,mode);
+		}
+	}
+
+	bool outOfKey = false;
+	assert(semiToNoteWithinKeySig(0,0,0,&outOfKey)==0);	// C in C Major Ionian
+	assert(outOfKey==false);
+	assert(semiToNoteWithinKeySig(1,0,0,&outOfKey)==0);	// C# in C Major Ionian
+	assert(outOfKey==true);
+	assert(semiToNoteWithinKeySig(2,0,0,&outOfKey)==1);	// D in C Major Ionian
+	assert(outOfKey==false);
+	assert(semiToNoteWithinKeySig(9,11,0,&outOfKey)==5);	// A in B Major Ionian
+	assert(outOfKey==true);
+	assert(semiToNoteWithinKeySig(9,11,1,&outOfKey)==6);	// A in B Dorian
+	assert(outOfKey==false);
+}
 
 struct ChordRollover : Module {
 	enum ParamId {
@@ -36,6 +161,10 @@ struct ChordRollover : Module {
 	float prevPitch = 0.0;
 
 	ChordRollover() {
+		INFO("Running Tests...");
+		runTests();
+		INFO("...Tests completed");
+
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 		configSwitch(KEYSIG_PARAM, 0.f, 11.f, 0.f, "Key Signature", {"C", "C♯/D♭", "D", "D♯/E♭", "E", "F", "F♯/G♭", "G", "G♯/A♭", "A", "A♯/B♭", "B"});
 		configSwitch(CHORD_PARAM, 1.f, 7.f, 4.f, "Notes in chord", {"Monad", "Diad", "Triad", "Tetrad", "Pentad", "Hexad", "Heptad"});
