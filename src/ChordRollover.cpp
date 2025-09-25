@@ -8,6 +8,8 @@ struct ChordRollover : Module {
 	};
 	enum InputId {
 		EXAMPLE_INPUT,
+		VOCT_INPUT,
+		GATE_INPUT,
 		INPUTS_LEN
 	};
 	enum OutputId {
@@ -26,8 +28,10 @@ struct ChordRollover : Module {
 		configParam(EXAMPLE_PARAM, 0.f, 1.f, 0.f, "");
 		configInput(EXAMPLE_INPUT, "");
 		configOutput(EXAMPLE_OUTPUT, "");
-		configOutput(VOCT_OUTPUT, "Pitch");
-		configOutput(GATE_OUTPUT, "Gate");
+		configInput(VOCT_INPUT, "(Mono) Pitch");
+		configInput(GATE_INPUT, "(Mono) Gate");
+		configOutput(VOCT_OUTPUT, "(Poly) Pitch");
+		configOutput(GATE_OUTPUT, "(Poly) Gate");
 	}
 
 	void process(const ProcessArgs& args) override {
@@ -50,9 +54,10 @@ struct ChordRolloverWidget : ModuleWidget {
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(7.735, 16.277)), module, ChordRollover::EXAMPLE_PARAM));
 
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(7.513, 35.36)), module, ChordRollover::EXAMPLE_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(7, 97)), module, ChordRollover::VOCT_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(width - 7, 97)), module, ChordRollover::GATE_INPUT));
 
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(7.606, 52.759)), module, ChordRollover::EXAMPLE_OUTPUT));
-
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(7, 113)), module, ChordRollover::VOCT_OUTPUT));
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(width - 7, 113)), module, ChordRollover::GATE_OUTPUT));
 
