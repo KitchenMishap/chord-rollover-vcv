@@ -15,10 +15,17 @@
      id="layer1">
     <rect
        style="fill:#e6e6e6"
-       id="rect1"
+       id="background"
        width="25.40"
        height="128.5"
        x="0"
        y="0" />
+    <rect
+            style="fill:#000000"
+            id="output-black"
+            width="21.40"
+            height="13"
+            x="2"
+            y="105" />
   </g>
 </svg>
