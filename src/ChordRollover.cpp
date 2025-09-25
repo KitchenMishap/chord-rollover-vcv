@@ -178,6 +178,7 @@ struct ChordRollover : Module {
 	float prevPitch = 0.0;
 	std::vector<float> fromPitches;
 	std::vector<float> toPitches;
+	int timerSamples;
 
 	ChordRollover() {
 		INFO("Running Tests...");
@@ -228,6 +229,16 @@ struct ChordRollover : Module {
 		return pitches;
 	}
 
+	std::vector<float> interpolatePitches(float progress)
+	{
+		std::vector<float> pitches;
+		for( unsigned int i=0; i<fromPitches.size(); i++ ) {
+			float pitch = progress * toPitches[i] + (1.f - progress) * fromPitches[i];
+			pitches.push_back(pitch);
+		}
+		return pitches;
+	}
+
 	void playChord(std::vector<float> pitches)
 	{
 		outputs[VOCT_OUTPUT].setChannels(pitches.size());
@@ -237,6 +248,8 @@ struct ChordRollover : Module {
 	}
 
 	void process(const ProcessArgs& args) override {
+		timerSamples++;
+
 		// Has the gate been triggered this sample?
 		float gateV = inputs[GATE_INPUT].getVoltage();
 		auto tc = trigger.processEvent(gateV, 0.1, 1.0);
@@ -271,7 +284,18 @@ struct ChordRollover : Module {
 		if( pitchChange ) {
 			toPitches = constructChord();
 			playChord(toPitches);
+			timerSamples = 0;
 		}
+
+		if( timerSamples < 48000 ) {
+			float progress = timerSamples / 48000.f;
+			std::vector<float> pitches = interpolatePitches(progress);
+			playChord(pitches);
+		}
+		if( timerSamples == 48000 ) {
+			fromPitches = toPitches;
+		}
+
 	}
 };
 
