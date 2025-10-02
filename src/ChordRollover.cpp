@@ -213,6 +213,7 @@ int chordNotes[8] = {0,2,4,7,9,11,14,16};	// Room for a heptad plus first invers
 struct ChordRollover : Module {
 	enum ParamId {
 		KEYSIG_PARAM,
+		MODE_PARAM,
 		CHORD_PARAM,
 		TIME_PARAM,
 		PROFILE_PARAM,
@@ -257,6 +258,7 @@ struct ChordRollover : Module {
 
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 		configSwitch(KEYSIG_PARAM, 0.f, 11.f, 0.f, "Key Signature", {"C", "C♯/D♭", "D", "D♯/E♭", "E", "F", "F♯/G♭", "G", "G♯/A♭", "A", "A♯/B♭", "B"});
+		configSwitch(MODE_PARAM, 0.f, 6.f, 0.f, "Mode", {"Ionian (Major)", "Dorian", "Phrygian", "Lydian", "Mixolydian", "Aeolian (Minor)", "Locrian"});
 		configSwitch(CHORD_PARAM, 1.f, 7.f, 4.f, "Notes in chord", {"Monad", "Diad", "Triad", "Tetrad", "Pentad", "Hexad", "Heptad"});
 		configParam(TIME_PARAM, 0.f, 5.f, 0.5f, "Glide time (s)" );
 		configSwitch(PROFILE_PARAM, (float)STEP_PROFILE, (float)HALFSINE_PROFILE, (float)TRIANGLE_PROFILE, "Glide profile", {"Step", "Triangle", "Sine", "Half Sine"});
@@ -269,7 +271,7 @@ struct ChordRollover : Module {
 
 	std::vector<float> constructChord() {
 		int key = (int)(params[KEYSIG_PARAM].getValue());
-		int mode = 0;	// Not implemented yet
+		int mode = (int)(params[MODE_PARAM].getValue());
 		std::string modeString = generateModeString(mode);
 
 		float voct = inputs[VOCT_INPUT].getVoltage();
@@ -455,10 +457,11 @@ struct ChordRolloverWidget : ModuleWidget {
 		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(col1, 25)), module, ChordRollover::KEYSIG_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(col2, 25)), module, ChordRollover::CHORD_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(col1, 50)), module, ChordRollover::TIME_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(col2, 50)), module, ChordRollover::PROFILE_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(width / 2.f, 75)), module, ChordRollover::JUMBLE_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(col2, 25)), module, ChordRollover::MODE_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(col1, 50)), module, ChordRollover::CHORD_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(col2, 50)), module, ChordRollover::TIME_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(col1, 75)), module, ChordRollover::PROFILE_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(col2, 75)), module, ChordRollover::JUMBLE_PARAM));
 
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(7, 97)), module, ChordRollover::VOCT_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(width - 7, 97)), module, ChordRollover::GATE_INPUT));
