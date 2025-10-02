@@ -110,38 +110,54 @@ void testKeyMode(int key, int mode)
 	}
 }
 
-std::pair<float, float> primarySecondaryScore(const std::vector<float>& toChordPitches, const std::vector<float>& fromChordPitches)
+// A primary and secondary score for comparing "jumbleness" of chord mappings. Biggest score wins.
+std::pair<float, float> primarySecondaryScore(const std::vector<float>& toChordPitches, const std::vector<float>& fromChordPitches, bool jumbleMode)
 {
-	// For now we insist on the "maximize the minimum absolute difference" jumbling.
+	bool minimizeStandardDeviation = !jumbleMode;
+
+	std::vector<float> absDifferences;
 	std::vector<float> differences;
+	float totalAbsDifference = 0.f;
 	float totalDifference = 0.f;
 	for( unsigned int i=0; i<toChordPitches.size(); i++ ) {
-		float absDiff = abs(toChordPitches[i] - fromChordPitches[i]);
-		differences.push_back(absDiff);
-		totalDifference += absDiff;
+		float difference = toChordPitches[i] - fromChordPitches[i];
+		differences.push_back(difference);
+		totalDifference += difference;
+		float absDiff = abs(difference);
+		absDifferences.push_back(absDiff);
+		totalAbsDifference += absDiff;
 	}
-	float minDiff = *std::min_element(differences.begin(), differences.end());
-	return std::make_pair(minDiff, totalDifference);
+	float minAbsDiff = *std::min_element(absDifferences.begin(), absDifferences.end());
+	float meanChange = totalDifference / toChordPitches.size();
+	float sumOfDifferenceFromMeanSquared = 0.f;
+	for( unsigned int i=0; i<toChordPitches.size(); i++ ) {
+		sumOfDifferenceFromMeanSquared += (differences[i] - meanChange)*(differences[i] - meanChange);
+	}
+	float sampleDeviation = sqrt(sumOfDifferenceFromMeanSquared/(toChordPitches.size()-1));
+
+	if( minimizeStandardDeviation ) {
+		return std::make_pair(-sampleDeviation, -totalAbsDifference);
+	} else {
+		return std::make_pair(minAbsDiff, totalAbsDifference);
+	}
 }
 
-std::vector<float> jumbleChord(std::vector<float> toChordPitches, std::vector<float> fromChordPitches)
+std::vector<float> jumbleChord(std::vector<float> toChordPitches, std::vector<float> fromChordPitches, bool jumbleMode)
 {
-	INFO("Asserting vectors sizes...");
 	assert(toChordPitches.size() == fromChordPitches.size());
-	INFO("...Done");
 
 	std::vector<float> candidateToPitches = toChordPitches;
 	// Important: sort it first, to get the lexicographically smallest permutation
 	std::sort(candidateToPitches.begin(), candidateToPitches.end());
 
 	// We assess the lexicographically first permutation
-	std::pair<float, float> bestPrimarySecondaryScore = primarySecondaryScore(candidateToPitches, fromChordPitches);
+	std::pair<float, float> bestPrimarySecondaryScore = primarySecondaryScore(candidateToPitches, fromChordPitches, jumbleMode);
 	// So far (out of a count of one!) it's the best permutation we have
 	std::vector<float> bestPermutation = candidateToPitches;
 
 	do {
 		// Process current permutation
-		std::pair<float,float> currentPrimarySecondaryScore = primarySecondaryScore(candidateToPitches, fromChordPitches);
+		std::pair<float,float> currentPrimarySecondaryScore = primarySecondaryScore(candidateToPitches, fromChordPitches, jumbleMode);
 		if (currentPrimarySecondaryScore.first > bestPrimarySecondaryScore.first
 			|| ( (currentPrimarySecondaryScore.first == bestPrimarySecondaryScore.first)
 				&& (currentPrimarySecondaryScore.second > bestPrimarySecondaryScore.second) ) ) {
@@ -189,7 +205,7 @@ void runTests()
 	from.push_back(2.f);
 	to.push_back(3.f);
 	to.push_back(5.f);
-	jumbleChord(from, to);
+	jumbleChord(from, to, true);
 }
 
 int chordNotes[8] = {0,2,4,7,9,11,14,16};	// Room for a heptad plus first inversion
@@ -200,6 +216,7 @@ struct ChordRollover : Module {
 		CHORD_PARAM,
 		TIME_PARAM,
 		PROFILE_PARAM,
+		JUMBLE_PARAM,
 		PARAMS_LEN
 	};
 	enum InputId {
@@ -243,6 +260,7 @@ struct ChordRollover : Module {
 		configSwitch(CHORD_PARAM, 1.f, 7.f, 4.f, "Notes in chord", {"Monad", "Diad", "Triad", "Tetrad", "Pentad", "Hexad", "Heptad"});
 		configParam(TIME_PARAM, 0.f, 5.f, 0.5f, "Glide time (s)" );
 		configSwitch(PROFILE_PARAM, (float)STEP_PROFILE, (float)HALFSINE_PROFILE, (float)TRIANGLE_PROFILE, "Glide profile", {"Step (Bypass)", "Triangle", "Sine", "Half Sine"});
+		configSwitch(JUMBLE_PARAM, 0.f, 1.f, 0.f, "Jumble Mode", {"Off", "On"});
 		configInput(VOCT_INPUT, "(Mono) Pitch");
 		configInput(GATE_INPUT, "(Mono) Gate");
 		configOutput(VOCT_OUTPUT, "(Poly) Pitch");
@@ -375,7 +393,8 @@ struct ChordRollover : Module {
 			}
 
 			// Jumble notes in chord according to settings, where we are now, and where we want to get to
-			toPitches = jumbleChord(chord, fromPitches);
+			bool jumbleMode = (params[JUMBLE_PARAM].getValue() == 1.f);
+			toPitches = jumbleChord(chord, fromPitches, jumbleMode);
 
 			// Calculate timerTarget based on glide time setting knob
 			float glidePeriodSeconds = params[TIME_PARAM].getValue();
@@ -413,17 +432,20 @@ struct ChordRolloverWidget : ModuleWidget {
 		setModule(module);
 		setPanel(createPanel(asset::plugin(pluginInstance, "res/Panel.svg")));
 
-		float width = 5.08 * 5;
+		float width = 5.08 * 6;
+		float col1 = 5.08 * 1.5;
+		float col2 = 5.08 * 4.5;
 
 		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0)));
 		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
 		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(width/2.f, 24)), module, ChordRollover::KEYSIG_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(width/2.f, 41)), module, ChordRollover::CHORD_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(width/2.f, 58)), module, ChordRollover::TIME_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(width/2.f, 75)), module, ChordRollover::PROFILE_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(col1, 25)), module, ChordRollover::KEYSIG_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(col2, 25)), module, ChordRollover::CHORD_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(col1, 50)), module, ChordRollover::TIME_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(col2, 50)), module, ChordRollover::PROFILE_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(width / 2.f, 75)), module, ChordRollover::JUMBLE_PARAM));
 
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(7, 97)), module, ChordRollover::VOCT_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(width - 7, 97)), module, ChordRollover::GATE_INPUT));

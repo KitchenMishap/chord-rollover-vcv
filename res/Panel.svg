@@ -2,9 +2,9 @@
 <!-- MANUALLY EDITED AFTER Created with Inkscape (http://www.inkscape.org/) -->
 
 <svg
-   width="25.40mm"
+   width="30.48mm"
    height="128.5mm"
-   viewBox="0 0 25.40 128.5"
+   viewBox="0 0 30.48 128.5"
    version="1.1"
    id="svg1"
    xmlns="http://www.w3.org/2000/svg"
@@ -16,14 +16,14 @@
     <rect
        style="fill:#e6e6e6"
        id="background"
-       width="25.40"
+       width="30.48"
        height="128.5"
        x="0"
        y="0" />
     <rect
             style="fill:#000000"
             id="output-black"
-            width="21.40"
+            width="26.48"
             height="13"
             x="2"
             y="105" />
