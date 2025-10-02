@@ -248,8 +248,10 @@ struct ChordRollover : Module {
 	int prevNumNotes = -1;				// The number of notes in the chord (a param) from the previous process()
 	std::vector<float> fromPitches;		// The pitches in the chord we're interpolating from
 	std::vector<float> toPitches;		// The pitches in the chord we're intepolating to (guaranteed same size)
+	int lastValidNotePressed = 0;		// The last valid note pressed (valid in this key sig / mode)
 	int timerSamples = 0;				// The number of samples that we are "into" a slide
 	int timerTarget = 0;				// The time (in samples) that we are expecting to end the slide. 0 means no slide.
+	bool gateSuppressed = false;		// We hold this true from when a new keypress is not in the correct key
 
 	ChordRollover() {
 		INFO("Running Tests...");
@@ -269,7 +271,7 @@ struct ChordRollover : Module {
 		configOutput(GATE_OUTPUT, "(Poly) Gate");
 	}
 
-	std::vector<float> constructChord() {
+	int notePressed(bool &invalidPress) {
 		int key = (int)(params[KEYSIG_PARAM].getValue());
 		int mode = (int)(params[MODE_PARAM].getValue());
 		std::string modeString = generateModeString(mode);
@@ -277,12 +279,13 @@ struct ChordRollover : Module {
 		float voct = inputs[VOCT_INPUT].getVoltage();
 		int semi = voltageToNearestSemi(voct);
 
-		bool outOfKey = false;
-		int note = semiToNoteWithinKeySig(semi, key, modeString, &outOfKey);
-		// If the user presses a key which is NOT in the selected key signature,
-		// note is "forced" to be something nearby in the key signature, and
-		// as a "bonus" feature, a first inversion of the chord is played instead
-		int firstInversion = outOfKey ? 1 : 0;
+		return semiToNoteWithinKeySig(semi, key, modeString, &invalidPress);
+	}
+
+	std::vector<float> constructChord(int validNote) {
+		int key = (int)(params[KEYSIG_PARAM].getValue());
+		int mode = (int)(params[MODE_PARAM].getValue());
+		std::string modeString = generateModeString(mode);
 
 		// The user has selected the number of notes in the chord on a knob
 		unsigned int numNotes = (int)(params[CHORD_PARAM].getValue());
@@ -290,7 +293,7 @@ struct ChordRollover : Module {
 		// These integers are "nth note within key signature" from pressed root
 		std::vector<int> notes;
 		for( unsigned int noteIndex = 0; noteIndex < numNotes; noteIndex++ ) {
-			int thisNote = note + chordNotes[noteIndex + firstInversion];
+			int thisNote = validNote + chordNotes[noteIndex];
 			notes.push_back(thisNote);
 		}
 
@@ -352,15 +355,38 @@ struct ChordRollover : Module {
 		bool numNotesChanged = (numNotes != prevNumNotes);
 		prevNumNotes = numNotes;
 
+		// Is the current keypress pitch supported in the current key signature / mode?
+		bool invalidPress = false;
+		int note = notePressed(invalidPress);
+		if( !invalidPress ) {
+			lastValidNotePressed = note;
+			gateSuppressed = false;
+		}
+		std::vector<float> pitches = constructChord(lastValidNotePressed);
+
 		// Has the input gate been triggered this sample?
 		float gateV = inputs[GATE_INPUT].getVoltage();
 		auto tc = trigger.processEvent(gateV, 0.1, 1.0);
 		bool gateOn = (tc==dsp::SchmittTrigger::TRIGGERED);	// The gate has gone from "unpressed" to "pressed"
-
-		// Has the pitch changed more than 0.5 semitones this sample?
-		float pitchV = inputs[VOCT_INPUT].getVoltage();
-		bool pitchChange = abs(pitchV - prevPitch) > 1.f / 12.f / 2.f;
-		prevPitch = pitchV;
+		bool pitchChange = false;
+		if( invalidPress ) {
+			// The user pressed a key that's not in this key signature / mode. Act like it didn't happen
+			if( gateOn ) {
+				// It was a new keypress. Get rid of it altogether
+				gateOn = false;
+				// And supress the output gates for a while
+				gateSuppressed = true;
+			} else {
+				// It was a rollover to an invalid key
+				// gateOn is already false
+				// Leave gateV as it is, because it still relates to the key being rolled from
+			}
+		} else {
+			// Has the pitch changed more than 0.5 semitones this sample?
+			float pitchV = inputs[VOCT_INPUT].getVoltage();
+			pitchChange = abs(pitchV - prevPitch) > 1.f / 12.f / 2.f;
+			prevPitch = pitchV;
+		}
 
 		// Has the pitch changed without a gate trigger?
 		// (and we don't want to rollover if the number of notes has changed)
@@ -374,25 +400,27 @@ struct ChordRollover : Module {
 		bool light = pulse.process(args.sampleTime);
 		lights[ROLLOVER_LIGHT].setBrightness(light ? 1.f : 0.f);
 
-		// The polyphonic gate outputs are just copies of the input gate
-		float gate = inputs[GATE_INPUT].getVoltage();
+		// The polyphonic gate outputs are just copies of the input gate (unless suppressed by an out-of-key press)
+		if( gateSuppressed ) {
+			gateV = 0.f;
+		}
 		outputs[GATE_OUTPUT].setChannels(numNotes);
 		for( int i=0; i<numNotes; i++ ) {
-			outputs[GATE_OUTPUT].setVoltage(gate, i);
+			outputs[GATE_OUTPUT].setVoltage(gateV, i);
 		}
 
-		if( gateOn || numNotesChanged ) {
+		if( (gateOn) || numNotesChanged ) {
 			// For a gateOn trigger, we are starting a chord
 			// We also do this when the user moves the "number of notes" knob
 			// (in that case, the "new" chord will only sound if the gate input is high, as this is copied to output gates)
-			fromPitches = constructChord();
+			fromPitches = pitches;
 			playChord(fromPitches);
 			timerTarget = 0;		// Indicate "no current slide"
 		} else if ( rollover ) {
 			// User has "rolled over" from one key to another, initiating a portamento glide
 
 			// Where do we want to get to?
-			auto chord = constructChord();
+			auto chord = pitches;
 
 			// Where are we now?
 			bool abortedPreviousGlide = false;
@@ -407,7 +435,7 @@ struct ChordRollover : Module {
 				// fromPitches is already set
 			}
 
-			// Jumble notes in chord according to settings, where we are now, and where we want to get to
+			// Jumble notes in chord according to: jumble mode, where we are now, and where we want to get to
 			bool jumbleMode = (params[JUMBLE_PARAM].getValue() == 1.f);
 			toPitches = jumbleChord(chord, fromPitches, jumbleMode);
 
@@ -420,7 +448,7 @@ struct ChordRollover : Module {
 				pulse.trigger(glidePeriodSeconds);
 			}
 			float sampleTimeSeconds = args.sampleTime;
-			timerTarget = (int)(glidePeriodSeconds / sampleTimeSeconds);	// End of glide
+			timerTarget = (int)(glidePeriodSeconds / sampleTimeSeconds);	// When the end of glide will be
 
 			timerSamples = 0;	// Start of glide
 		}
@@ -431,10 +459,10 @@ struct ChordRollover : Module {
 			// Mid glide
 			timerSamples++;
 			float progress = ((float)(timerSamples)) / timerTarget;
-			std::vector<float> pitches = interpolatePitches(progress);
-			playChord(pitches);
+			std::vector<float> interPitches = interpolatePitches(progress);
+			playChord(interPitches);
 		} else if( timerSamples == timerTarget ) {
-			// End point of glide. Act like this "always was" a flat unglided chord
+			// End point of glide. From now, act like this "always was" a flat unglided chord
 			fromPitches = toPitches;
 			timerTarget = 0;
 		}
