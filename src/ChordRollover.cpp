@@ -362,11 +362,13 @@ struct ChordRollover : Module {
 			auto chord = constructChord();
 
 			// Where are we now?
+			bool abortedPreviousGlide = false;
 			if( timerTarget > 0 && timerSamples <= timerTarget ) {
 				// We WERE in the middle of a slide already.
 				// Start the new slide from wherever we'd got to so far.
 				float progress = ((float)(timerSamples)) / timerTarget;
 				fromPitches = interpolatePitches(progress);
+				abortedPreviousGlide = true;
 			} else {
 				// We're sliding from a previously steady chord
 				// fromPitches is already set
@@ -374,10 +376,19 @@ struct ChordRollover : Module {
 
 			// Jumble notes in chord according to settings, where we are now, and where we want to get to
 			toPitches = jumbleChord(chord, fromPitches);
-			timerSamples = 0;	// Start of glide
+
+			// Calculate timerTarget based on glide time setting knob
 			float glidePeriodSeconds = params[TIME_PARAM].getValue();
+			if( abortedPreviousGlide ) {
+				// If we started this glide from within a previous glide, we spend half as long on the new glide,
+				// and restart the pulse generator for the rollover light accordingly
+				glidePeriodSeconds = glidePeriodSeconds / 2.f;
+				pulse.trigger(glidePeriodSeconds);
+			}
 			float sampleTimeSeconds = args.sampleTime;
 			timerTarget = (int)(glidePeriodSeconds / sampleTimeSeconds);	// End of glide
+
+			timerSamples = 0;	// Start of glide
 		}
 
 		if( timerTarget==0 ) {
