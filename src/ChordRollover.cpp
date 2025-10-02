@@ -178,7 +178,8 @@ struct ChordRollover : Module {
 	float prevPitch = 0.0;
 	std::vector<float> fromPitches;
 	std::vector<float> toPitches;
-	int timerSamples;
+	int timerSamples = 0;
+	int timerTarget = 0;
 
 	ChordRollover() {
 		INFO("Running Tests...");
@@ -285,14 +286,17 @@ struct ChordRollover : Module {
 			toPitches = constructChord();
 			playChord(toPitches);
 			timerSamples = 0;
+			float glidePeriodSeconds = params[TIME_PARAM].getValue();
+			float sampleTimeSeconds = args.sampleTime;
+			timerTarget = (int)(glidePeriodSeconds / sampleTimeSeconds);
 		}
 
-		if( timerSamples < 48000 ) {
-			float progress = timerSamples / 48000.f;
+		if( timerSamples < timerTarget ) {
+			float progress = ((float)(timerSamples)) / timerTarget;
 			std::vector<float> pitches = interpolatePitches(progress);
 			playChord(pitches);
 		}
-		if( timerSamples == 48000 ) {
+		if( timerSamples == timerTarget ) {
 			fromPitches = toPitches;
 		}
 
