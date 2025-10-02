@@ -259,7 +259,7 @@ struct ChordRollover : Module {
 		configSwitch(KEYSIG_PARAM, 0.f, 11.f, 0.f, "Key Signature", {"C", "C♯/D♭", "D", "D♯/E♭", "E", "F", "F♯/G♭", "G", "G♯/A♭", "A", "A♯/B♭", "B"});
 		configSwitch(CHORD_PARAM, 1.f, 7.f, 4.f, "Notes in chord", {"Monad", "Diad", "Triad", "Tetrad", "Pentad", "Hexad", "Heptad"});
 		configParam(TIME_PARAM, 0.f, 5.f, 0.5f, "Glide time (s)" );
-		configSwitch(PROFILE_PARAM, (float)STEP_PROFILE, (float)HALFSINE_PROFILE, (float)TRIANGLE_PROFILE, "Glide profile", {"Step (Bypass)", "Triangle", "Sine", "Half Sine"});
+		configSwitch(PROFILE_PARAM, (float)STEP_PROFILE, (float)HALFSINE_PROFILE, (float)TRIANGLE_PROFILE, "Glide profile", {"Step", "Triangle", "Sine", "Half Sine"});
 		configSwitch(JUMBLE_PARAM, 0.f, 1.f, 0.f, "Jumble Mode", {"Off", "On"});
 		configInput(VOCT_INPUT, "(Mono) Pitch");
 		configInput(GATE_INPUT, "(Mono) Gate");
@@ -312,10 +312,23 @@ struct ChordRollover : Module {
 	{
 		assert(toPitches.size() == fromPitches.size());
 
+		// Here are various profiles that go from 0 to 1 as the input parameter goes from 0 to 1
+		float modifiedProgress = 0.0;
+		int shape = (int)(params[PROFILE_PARAM].getValue());
+		if( shape==STEP_PROFILE ) {
+			modifiedProgress = (progress==0.0 ? 0.0 : 1.0);
+		} else if( shape==TRIANGLE_PROFILE ) {
+			modifiedProgress = progress;
+		} else if( shape==SINE_PROFILE ) {
+			modifiedProgress = sin( (progress - 0.5) * 3.14159 ) * 0.5 + 0.5;
+		} else if( shape==HALFSINE_PROFILE ) {
+			modifiedProgress = sin( progress * 3.14159 / 2.f );
+		}
+
 		// Interpolate between fromPitches (progress==0) and toPitches (progress==1)
 		std::vector<float> pitches;
 		for( unsigned int i=0; i<fromPitches.size(); i++ ) {
-			float pitch = progress * toPitches[i] + (1.f - progress) * fromPitches[i];
+			float pitch = modifiedProgress * toPitches[i] + (1.f - modifiedProgress) * fromPitches[i];
 			pitches.push_back(pitch);
 		}
 		return pitches;
