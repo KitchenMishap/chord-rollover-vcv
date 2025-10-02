@@ -110,6 +110,49 @@ void testKeyMode(int key, int mode)
 	}
 }
 
+std::pair<float, float> primarySecondaryScore(const std::vector<float>& toChordPitches, const std::vector<float>& fromChordPitches)
+{
+	// For now we insist on the "maximize the minimum absolute difference" jumbling.
+	std::vector<float> differences;
+	float totalDifference = 0.f;
+	for( unsigned int i=0; i<toChordPitches.size(); i++ ) {
+		float absDiff = abs(toChordPitches[i] - fromChordPitches[i]);
+		differences.push_back(absDiff);
+		totalDifference += absDiff;
+	}
+	float minDiff = *std::min_element(differences.begin(), differences.end());
+	return std::make_pair(minDiff, totalDifference);
+}
+
+std::vector<float> jumbleChord(std::vector<float> toChordPitches, std::vector<float> fromChordPitches)
+{
+	INFO("Asserting vectors sizes...");
+	assert(toChordPitches.size() == fromChordPitches.size());
+	INFO("...Done");
+
+	std::vector<float> candidateToPitches = toChordPitches;
+	// Important: sort it first, to get the lexicographically smallest permutation
+	std::sort(candidateToPitches.begin(), candidateToPitches.end());
+
+	// We assess the lexicographically first permutation
+	std::pair<float, float> bestPrimarySecondaryScore = primarySecondaryScore(candidateToPitches, fromChordPitches);
+	// So far (out of a count of one!) it's the best permutation we have
+	std::vector<float> bestPermutation = candidateToPitches;
+
+	do {
+		// Process current permutation
+		std::pair<float,float> currentPrimarySecondaryScore = primarySecondaryScore(candidateToPitches, fromChordPitches);
+		if (currentPrimarySecondaryScore.first > bestPrimarySecondaryScore.first
+			|| ( (currentPrimarySecondaryScore.first == bestPrimarySecondaryScore.first)
+				&& (currentPrimarySecondaryScore.second > bestPrimarySecondaryScore.second) ) ) {
+			bestPrimarySecondaryScore = currentPrimarySecondaryScore;
+			bestPermutation = candidateToPitches;
+				}
+	} while (std::next_permutation(candidateToPitches.begin(), candidateToPitches.end()));
+
+	return bestPermutation;
+}
+
 void runTests()
 {
 	assert(voltageToNearestSemi(0.f) == 0);
@@ -139,6 +182,14 @@ void runTests()
 	modeString = generateModeString(1);
 	assert(semiToNoteWithinKeySig(9,11,modeString,&outOfKey)==6-7);	// A in B Dorian
 	assert(outOfKey==false);
+
+	std::vector<float> from;
+	std::vector<float> to;
+	from.push_back(1.f);
+	from.push_back(2.f);
+	to.push_back(3.f);
+	to.push_back(5.f);
+	jumbleChord(from, to);
 }
 
 int chordNotes[8] = {0,2,4,7,9,11,14,16};	// Room for a heptad plus first inversion
@@ -173,13 +224,14 @@ struct ChordRollover : Module {
 		HALFSINE_PROFILE
 	};
 
-	dsp::SchmittTrigger trigger;
-	dsp::PulseGenerator pulse;
-	float prevPitch = 0.0;
-	std::vector<float> fromPitches;
-	std::vector<float> toPitches;
-	int timerSamples = 0;
-	int timerTarget = 0;
+	dsp::SchmittTrigger trigger;		// A handler for the gate input, debouncing kind of thing
+	dsp::PulseGenerator pulse;			// A pulse generator for the rollover light
+	float prevPitch = 0.0;				// The pitch input from the previous process()
+	int prevNumNotes = -1;				// The number of notes in the chord (a param) from the previous process()
+	std::vector<float> fromPitches;		// The pitches in the chord we're interpolating from
+	std::vector<float> toPitches;		// The pitches in the chord we're intepolating to (guaranteed same size)
+	int timerSamples = 0;				// The number of samples that we are "into" a slide
+	int timerTarget = 0;				// The time (in samples) that we are expecting to end the slide. 0 means no slide.
 
 	ChordRollover() {
 		INFO("Running Tests...");
@@ -207,22 +259,29 @@ struct ChordRollover : Module {
 
 		bool outOfKey = false;
 		int note = semiToNoteWithinKeySig(semi, key, modeString, &outOfKey);
+		// If the user presses a key which is NOT in the selected key signature,
+		// note is "forced" to be something nearby in the key signature, and
+		// as a "bonus" feature, a first inversion of the chord is played instead
 		int firstInversion = outOfKey ? 1 : 0;
 
+		// The user has selected the number of notes in the chord on a knob
 		unsigned int numNotes = (int)(params[CHORD_PARAM].getValue());
 
+		// These integers are "nth note within key signature" from pressed root
 		std::vector<int> notes;
 		for( unsigned int noteIndex = 0; noteIndex < numNotes; noteIndex++ ) {
 			int thisNote = note + chordNotes[noteIndex + firstInversion];
 			notes.push_back(thisNote);
 		}
 
+		// Convert to semitones within key signature
 		std::vector<int> semis;
 		for( unsigned int noteIndex = 0; noteIndex < numNotes; noteIndex++ ) {
 			int thisSemi = noteToSemiWithinKeySig(notes[noteIndex], key, modeString);
 			semis.push_back(thisSemi);
 		}
 
+		// Comvert to one volt per octave (12 semis in an octave)
 		std::vector<float> pitches;
 		for( unsigned int noteIndex = 0; noteIndex < numNotes; noteIndex++ ) {
 			pitches.push_back((float)(semis[noteIndex]) / 12.f);
@@ -230,8 +289,12 @@ struct ChordRollover : Module {
 		return pitches;
 	}
 
+	// Progress is a float between zero (start of slide) and one (end of slide)
 	std::vector<float> interpolatePitches(float progress)
 	{
+		assert(toPitches.size() == fromPitches.size());
+
+		// Interpolate between fromPitches (progress==0) and toPitches (progress==1)
 		std::vector<float> pitches;
 		for( unsigned int i=0; i<fromPitches.size(); i++ ) {
 			float pitch = progress * toPitches[i] + (1.f - progress) * fromPitches[i];
@@ -240,6 +303,7 @@ struct ChordRollover : Module {
 		return pitches;
 	}
 
+	// Output the polyphonic pitches
 	void playChord(std::vector<float> pitches)
 	{
 		outputs[VOCT_OUTPUT].setChannels(pitches.size());
@@ -249,12 +313,16 @@ struct ChordRollover : Module {
 	}
 
 	void process(const ProcessArgs& args) override {
-		timerSamples++;
+		// First we check that the number of notes hasn't changed. Otherwise a mixture
+		// of sizes for fromPitches and toPitches could be disastrous!
+		int numNotes = (int)(params[CHORD_PARAM].getValue());
+		bool numNotesChanged = (numNotes != prevNumNotes);
+		prevNumNotes = numNotes;
 
-		// Has the gate been triggered this sample?
+		// Has the input gate been triggered this sample?
 		float gateV = inputs[GATE_INPUT].getVoltage();
 		auto tc = trigger.processEvent(gateV, 0.1, 1.0);
-		bool gateOn = (tc==dsp::SchmittTrigger::TRIGGERED);
+		bool gateOn = (tc==dsp::SchmittTrigger::TRIGGERED);	// The gate has gone from "unpressed" to "pressed"
 
 		// Has the pitch changed more than 0.5 semitones this sample?
 		float pitchV = inputs[VOCT_INPUT].getVoltage();
@@ -262,42 +330,68 @@ struct ChordRollover : Module {
 		prevPitch = pitchV;
 
 		// Has the pitch changed without a gate trigger?
-		bool rollover = pitchChange && !gateOn;
+		// (and we don't want to rollover if the number of notes has changed)
+		bool rollover = pitchChange && (!gateOn) && (!numNotesChanged);
 
-		// If so, flash the light
+		// If so we want to slide. Flash the light for as long as we expect the slide to continue
 		if( rollover ) {
-			pulse.trigger(0.1f);
+			float glidePeriod = params[TIME_PARAM].getValue();
+			pulse.trigger(glidePeriod);
 		}
 		bool light = pulse.process(args.sampleTime);
 		lights[ROLLOVER_LIGHT].setBrightness(light ? 1.f : 0.f);
 
+		// The polyphonic gate outputs are just copies of the input gate
 		float gate = inputs[GATE_INPUT].getVoltage();
-		int numNotes = (int)(params[CHORD_PARAM].getValue());
 		outputs[GATE_OUTPUT].setChannels(numNotes);
 		for( int i=0; i<numNotes; i++ ) {
 			outputs[GATE_OUTPUT].setVoltage(gate, i);
 		}
 
-		if( gateOn ) {
+		if( gateOn || numNotesChanged ) {
+			// For a gateOn trigger, we are starting a chord
+			// We also do this when the user moves the "number of notes" knob
+			// (in that case, the "new" chord will only sound if the gate input is high, as this is copied to output gates)
 			fromPitches = constructChord();
 			playChord(fromPitches);
-		}
-		if( pitchChange ) {
-			toPitches = constructChord();
-			playChord(toPitches);
-			timerSamples = 0;
+			timerTarget = 0;		// Indicate "no current slide"
+		} else if ( rollover ) {
+			// User has "rolled over" from one key to another, initiating a portamento glide
+
+			// Where do we want to get to?
+			auto chord = constructChord();
+
+			// Where are we now?
+			if( timerTarget > 0 && timerSamples <= timerTarget ) {
+				// We WERE in the middle of a slide already.
+				// Start the new slide from wherever we'd got to so far.
+				float progress = ((float)(timerSamples)) / timerTarget;
+				fromPitches = interpolatePitches(progress);
+			} else {
+				// We're sliding from a previously steady chord
+				// fromPitches is already set
+			}
+
+			// Jumble notes in chord according to settings, where we are now, and where we want to get to
+			toPitches = jumbleChord(chord, fromPitches);
+			timerSamples = 0;	// Start of glide
 			float glidePeriodSeconds = params[TIME_PARAM].getValue();
 			float sampleTimeSeconds = args.sampleTime;
-			timerTarget = (int)(glidePeriodSeconds / sampleTimeSeconds);
+			timerTarget = (int)(glidePeriodSeconds / sampleTimeSeconds);	// End of glide
 		}
 
-		if( timerSamples < timerTarget ) {
+		if( timerTarget==0 ) {
+			// No current glide
+		} else if( timerSamples < timerTarget ) {
+			// Mid glide
+			timerSamples++;
 			float progress = ((float)(timerSamples)) / timerTarget;
 			std::vector<float> pitches = interpolatePitches(progress);
 			playChord(pitches);
-		}
-		if( timerSamples == timerTarget ) {
+		} else if( timerSamples == timerTarget ) {
+			// End point of glide. Act like this "always was" a flat unglided chord
 			fromPitches = toPitches;
+			timerTarget = 0;
 		}
 
 	}
