@@ -235,13 +235,6 @@ struct ChordRollover : Module {
 		LIGHTS_LEN
 	};
 
-	enum Profiles {
-		STEP_PROFILE = 0,
-		TRIANGLE_PROFILE,
-		SINE_PROFILE,
-		HALFSINE_PROFILE
-	};
-
 	dsp::SchmittTrigger trigger;		// A handler for the gate input, debouncing kind of thing
 	dsp::PulseGenerator pulse;			// A pulse generator for the rollover light
 	float prevPitch = 0.0;				// The pitch input from the previous process()
@@ -263,7 +256,7 @@ struct ChordRollover : Module {
 		configSwitch(MODE_PARAM, 0.f, 6.f, 0.f, "Mode", {"Ionian (Major)", "Dorian", "Phrygian", "Lydian", "Mixolydian", "Aeolian (Minor)", "Locrian"});
 		configSwitch(CHORD_PARAM, 1.f, 7.f, 4.f, "Notes in chord", {"Monad", "Diad", "Triad", "Tetrad", "Pentad", "Hexad", "Heptad"});
 		configParam(TIME_PARAM, 0.f, 5.f, 0.5f, "Glide time (s)" );
-		configSwitch(PROFILE_PARAM, (float)STEP_PROFILE, (float)HALFSINE_PROFILE, (float)TRIANGLE_PROFILE, "Glide profile", {"Step", "Triangle", "Sine", "Half Sine"});
+		configParam(PROFILE_PARAM, 1.f, 10.f, 1.f, "Glide profile (1 for triangle, 10 for step)");
 		configSwitch(JUMBLE_PARAM, 0.f, 1.f, 0.f, "Jumble Mode", {"Off", "On"});
 		configInput(VOCT_INPUT, "(Mono) Pitch");
 		configInput(GATE_INPUT, "(Mono) Gate");
@@ -317,18 +310,28 @@ struct ChordRollover : Module {
 	{
 		assert(toPitches.size() == fromPitches.size());
 
-		// Here are various profiles that go from 0 to 1 as the input parameter goes from 0 to 1
-		float modifiedProgress = 0.0;
-		int shape = (int)(params[PROFILE_PARAM].getValue());
-		if( shape==STEP_PROFILE ) {
-			modifiedProgress = (progress==0.0 ? 0.0 : 1.0);
-		} else if( shape==TRIANGLE_PROFILE ) {
-			modifiedProgress = progress;
-		} else if( shape==SINE_PROFILE ) {
-			modifiedProgress = sin( (progress - 0.5) * 3.14159 ) * 0.5 + 0.5;
-		} else if( shape==HALFSINE_PROFILE ) {
-			modifiedProgress = sin( progress * 3.14159 / 2.f );
-		}
+		// Here is the profile that goes from 0 to 1 as the input parameter goes from 0 to 1
+		// (This is the "nth order algebraic sigmoid", used as a parametric smoothstep function, with n as squareness).
+		// n = 1 gives triangle (minimum squareness) and n=infinity would give a square step at x=0.5.
+
+		/* Old method, symmetric in time
+		float n = params[PROFILE_PARAM].getValue();
+		float x = progress;
+		// y = x^n/(x^n + (1-x)^n)
+		float xToN = pow(x,n);
+		float y = xToN / (xToN + pow(1.f - x,n));
+		float modifiedProgress = y;*/
+
+		// New code, with sharp start and soft end
+		float n = params[PROFILE_PARAM].getValue();
+		float x = (progress/2.f + 0.5);		// x now goes from 0.5 to 1.0
+		// y = x^n/(x^n + (1-x)^n)
+		float xToN = pow(x,n);
+		float y = xToN / (xToN + pow(1.f - x,n));
+		// y at this point goes from 0.5 to 1.0
+		// map y to (0.0 to 1.0)
+		y = (y-0.5f) * 2.f;
+		float modifiedProgress = y;
 
 		// Interpolate between fromPitches (progress==0) and toPitches (progress==1)
 		std::vector<float> pitches;
