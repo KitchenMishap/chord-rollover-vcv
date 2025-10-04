@@ -236,7 +236,6 @@ struct ChordRollover : Module {
 	};
 
 	dsp::SchmittTrigger trigger;		// A handler for the gate input, debouncing kind of thing
-	dsp::PulseGenerator pulse;			// A pulse generator for the rollover light
 	float prevPitch = 0.0;				// The pitch input from the previous process()
 	int prevNumNotes = -1;				// The number of notes in the chord (a param) from the previous process()
 	std::vector<float> fromPitches;		// The pitches in the chord we're interpolating from
@@ -333,6 +332,9 @@ struct ChordRollover : Module {
 		y = (y-0.5f) * 2.f;
 		float modifiedProgress = y;
 
+		// Light up the "Rollover" LED in a linear way based on progress instead of a fixed length pulse
+		lights[ROLLOVER_LIGHT].setBrightness(1.f - progress);
+
 		// Interpolate between fromPitches (progress==0) and toPitches (progress==1)
 		std::vector<float> pitches;
 		for( unsigned int i=0; i<fromPitches.size(); i++ ) {
@@ -395,14 +397,6 @@ struct ChordRollover : Module {
 		// (and we don't want to rollover if the number of notes has changed)
 		bool rollover = pitchChange && (!gateOn) && (!numNotesChanged);
 
-		// If so we want to slide. Flash the light for as long as we expect the slide to continue
-		if( rollover ) {
-			float glidePeriod = params[TIME_PARAM].getValue();
-			pulse.trigger(glidePeriod);
-		}
-		bool light = pulse.process(args.sampleTime);
-		lights[ROLLOVER_LIGHT].setBrightness(light ? 1.f : 0.f);
-
 		// The polyphonic gate outputs are just copies of the input gate (unless suppressed by an out-of-key press)
 		if( gateSuppressed ) {
 			gateV = 0.f;
@@ -446,9 +440,7 @@ struct ChordRollover : Module {
 			float glidePeriodSeconds = params[TIME_PARAM].getValue();
 			if( abortedPreviousGlide ) {
 				// If we started this glide from within a previous glide, we spend half as long on the new glide,
-				// and restart the pulse generator for the rollover light accordingly
 				glidePeriodSeconds = glidePeriodSeconds / 2.f;
-				pulse.trigger(glidePeriodSeconds);
 			}
 			float sampleTimeSeconds = args.sampleTime;
 			timerTarget = (int)(glidePeriodSeconds / sampleTimeSeconds);	// When the end of glide will be
@@ -490,9 +482,9 @@ struct ChordRolloverWidget : ModuleWidget {
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(col1, 25)), module, ChordRollover::KEYSIG_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(col2, 25)), module, ChordRollover::MODE_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(col1, 50)), module, ChordRollover::CHORD_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(col2, 50)), module, ChordRollover::TIME_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(col2, 50)), module, ChordRollover::JUMBLE_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(col1, 75)), module, ChordRollover::PROFILE_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(col2, 75)), module, ChordRollover::JUMBLE_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(col2, 75)), module, ChordRollover::TIME_PARAM));
 
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(7, 97)), module, ChordRollover::VOCT_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(width - 7, 97)), module, ChordRollover::GATE_INPUT));
