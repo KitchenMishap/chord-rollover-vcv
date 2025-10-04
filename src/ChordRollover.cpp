@@ -255,7 +255,7 @@ struct ChordRollover : Module {
 		configSwitch(KEYSIG_PARAM, 0.f, 11.f, 0.f, "Key Signature", {"C", "C♯/D♭", "D", "D♯/E♭", "E", "F", "F♯/G♭", "G", "G♯/A♭", "A", "A♯/B♭", "B"});
 		configSwitch(MODE_PARAM, 0.f, 6.f, 0.f, "Mode", {"Ionian (Major)", "Dorian", "Phrygian", "Lydian", "Mixolydian", "Aeolian (Minor)", "Locrian"});
 		configSwitch(CHORD_PARAM, 1.f, 7.f, 4.f, "Notes in chord", {"Monad", "Diad", "Triad", "Tetrad", "Pentad", "Hexad", "Heptad"});
-		configParam(TIME_PARAM, 0.f, 5.f, 0.5f, "Glide time (s)" );
+		configParam(TIME_PARAM, 0.001f, 5.f, 0.5f, "Glide time (s)" );
 		configParam(PROFILE_PARAM, 1.f, 10.f, 1.f, "Glide profile (1 for triangle, 10 for step)");
 		configSwitch(JUMBLE_PARAM, 0.f, 1.f, 0.f, "Jumble Mode", {"Off", "On"});
 		configInput(VOCT_INPUT, "(Mono) Pitch");
