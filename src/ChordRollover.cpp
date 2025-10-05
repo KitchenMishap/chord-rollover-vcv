@@ -177,13 +177,24 @@ JumbleScore jumblednessScore(int permutationIndex, const std::vector<float>& toC
 	return JumbleScore(permutationIndex, stdDevPitchChange, minAbsChange, anyNotesSame);
 }
 
-std::vector<float> jumbleChord(const std::vector<float> &toChordPitches, const std::vector<float> &fromChordPitches, bool jumbleMode)
+std::vector<float> jumbleChord(const std::vector<float> &toChordPitches, const std::vector<float> &fromChordPitches, float jumbleAmount)
 {
 	assert(toChordPitches.size() == fromChordPitches.size());
 
 	std::vector<float> candidateToPitches = toChordPitches;
 	// Important: sort it first, to get the lexicographically smallest permutation
 	std::sort(candidateToPitches.begin(), candidateToPitches.end());
+
+	// Firstly, if jumbleAmount is 0.0, and fromChordPitches is sorted, simply sort toChordPitches
+	if( jumbleAmount==0.f )
+	{
+		std::vector<float> sortedFrom = fromChordPitches;
+		std::sort(sortedFrom.begin(), sortedFrom.end());
+		if( sortedFrom==fromChordPitches ) {
+			INFO( "Bypassing jumble as jumbleAmount==0.0 and fromChordPitches is sorted" );
+			return candidateToPitches;
+		}
+	}
 
 	// We gather a score for every permutation, each in either "allowed" or "avoidable" vectors
 	std::vector<JumbleScore> allowedScores;
@@ -202,23 +213,18 @@ std::vector<float> jumbleChord(const std::vector<float> &toChordPitches, const s
 
 	int chosenPermutationIndex = -1;
 	if( allowedScores.size() > 0 ) {
-		// Choose first or last based on jumbleMode
 		int last = allowedScores.size() - 1;
+		// Choose somewhere between first and last based on jumbleAmount
+		int index = (int) (jumbleAmount * last);
 		std::sort(allowedScores.begin(), allowedScores.end());
-		if( jumbleMode ) {
-			chosenPermutationIndex = allowedScores[last].PermutationIndex();
-		} else {
-			chosenPermutationIndex = allowedScores[0].PermutationIndex();
-		}
+		chosenPermutationIndex = allowedScores[index].PermutationIndex();
 	} else {
 		// Not ideal, but resort to PleaseAvoid permutations
 		int last = avoidableScores.size() - 1;
+		// Choose somewhere between first and last based on jumbleAmount
+		int index = (int) (jumbleAmount * last);
 		std::sort(avoidableScores.begin(), avoidableScores.end());
-		if( jumbleMode ) {
-			chosenPermutationIndex = avoidableScores[last].PermutationIndex();
-		} else {
-			chosenPermutationIndex = avoidableScores[0].PermutationIndex();
-		}
+		chosenPermutationIndex = avoidableScores[index].PermutationIndex();
 	}
 	// candidateToPitches() was reverted to the first lexicographical order at the end of the above loop
 	for( int i=0; i<chosenPermutationIndex; i++ ) {
@@ -263,7 +269,7 @@ void runTests()
 	from.push_back(2.f);
 	to.push_back(3.f);
 	to.push_back(5.f);
-	jumbleChord(from, to, true);
+	jumbleChord(from, to, 0.5);
 }
 
 int chordNotes[8] = {0,2,4,7,9,11,14,16};	// Room for a heptad plus first inversion
@@ -304,9 +310,9 @@ struct ChordRollover : Module {
 	bool gateSuppressed = false;		// We hold this true from when a new keypress is not in the correct key
 
 	ChordRollover() {
-		INFO("Running Tests...");
+		INFO("ChordRollover: Running Tests...");
 		runTests();
-		INFO("...Tests completed");
+		INFO("ChordRollover: ...Tests completed");
 
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 		configSwitch(KEYSIG_PARAM, 0.f, 11.f, 0.f, "Key Signature", {"C", "C♯/D♭", "D", "D♯/E♭", "E", "F", "F♯/G♭", "G", "G♯/A♭", "A", "A♯/B♭", "B"});
@@ -314,7 +320,7 @@ struct ChordRollover : Module {
 		configSwitch(CHORD_PARAM, 1.f, 7.f, 4.f, "Notes in chord", {"Monad", "Diad", "Triad", "Tetrad", "Pentad", "Hexad", "Heptad"});
 		configParam(TIME_PARAM, 0.001f, 5.f, 0.5f, "Glide time (s)" );
 		configParam(PROFILE_PARAM, 1.f, 10.f, 1.f, "Glide profile (1 for triangle, 10 for step)");
-		configSwitch(JUMBLE_PARAM, 0.f, 1.f, 0.f, "Jumble Mode", {"Off", "On"});
+		configParam(JUMBLE_PARAM, 0.f, 1.f, 0.f, "Jumble Amount");
 		configInput(VOCT_INPUT, "(Mono) Pitch");
 		configInput(GATE_INPUT, "(Mono) Gate");
 		configOutput(VOCT_OUTPUT, "(Poly) Pitch");
@@ -489,9 +495,9 @@ struct ChordRollover : Module {
 				// fromPitches is already set
 			}
 
-			// Jumble notes in chord according to: jumble mode, where we are now, and where we want to get to
-			bool jumbleMode = (params[JUMBLE_PARAM].getValue() == 1.f);
-			toPitches = jumbleChord(chord, fromPitches, jumbleMode);
+			// Jumble notes in chord according to: jumble amount, where we are now, and where we want to get to
+			float jumbleAmount = params[JUMBLE_PARAM].getValue();
+			toPitches = jumbleChord(chord, fromPitches, jumbleAmount);
 
 			// Calculate timerTarget based on glide time setting knob
 			float glidePeriodSeconds = params[TIME_PARAM].getValue();
