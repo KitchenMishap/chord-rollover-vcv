@@ -1,4 +1,5 @@
 #include "plugin.hpp"
+#include <cfloat>
 
 const char* whiteNoteIntervals = "TTSTTTS";
 
@@ -110,39 +111,74 @@ void testKeyMode(int key, int mode)
 	}
 }
 
-// A primary and secondary score for comparing "jumbleness" of chord mappings. Biggest score wins.
-std::pair<float, float> primarySecondaryScore(const std::vector<float>& toChordPitches, const std::vector<float>& fromChordPitches, bool jumbleMode)
+void meanStandardDeviation(const std::vector<float>& data, float &mean, float &stdDev)
 {
-	bool minimizeStandardDeviation = !jumbleMode;
+	float sum = 0.f;
+	float sum_of_squares = 0.f;
+	unsigned int n = data.size();
 
-	std::vector<float> absDifferences;
-	std::vector<float> differences;
-	float totalAbsDifference = 0.f;
-	float totalDifference = 0.f;
-	for( unsigned int i=0; i<toChordPitches.size(); i++ ) {
-		float difference = toChordPitches[i] - fromChordPitches[i];
-		differences.push_back(difference);
-		totalDifference += difference;
-		float absDiff = abs(difference);
-		absDifferences.push_back(absDiff);
-		totalAbsDifference += absDiff;
+	for( unsigned int i = 0; i < n; i++ ) {
+		sum += data[i];
+		sum_of_squares += (data[i] * data[i]);
 	}
-	float minAbsDiff = *std::min_element(absDifferences.begin(), absDifferences.end());
-	float meanChange = totalDifference / toChordPitches.size();
-	float sumOfDifferenceFromMeanSquared = 0.f;
-	for( unsigned int i=0; i<toChordPitches.size(); i++ ) {
-		sumOfDifferenceFromMeanSquared += (differences[i] - meanChange)*(differences[i] - meanChange);
-	}
-	float sampleDeviation = sqrt(sumOfDifferenceFromMeanSquared/(toChordPitches.size()-1));
 
-	if( minimizeStandardDeviation ) {
-		return std::make_pair(-sampleDeviation, -totalAbsDifference);
-	} else {
-		return std::make_pair(minAbsDiff, totalAbsDifference);
-	}
+	mean = sum / n;
+	float variance = (sum_of_squares - (sum * sum / n)) / (n - 1);
+	stdDev = sqrt(variance);
 }
 
-std::vector<float> jumbleChord(std::vector<float> toChordPitches, std::vector<float> fromChordPitches, bool jumbleMode)
+// A primary and secondary score for comparing "jumbleness" of chord mappings. Biggest score wins.
+std::vector<float> primarySecondaryTertiaryScore(const std::vector<float>& toChordPitches, const std::vector<float>& fromChordPitches, bool jumbleMode)
+{
+	std::vector<float> pitchChange = toChordPitches;
+	for( unsigned int i = 0; i < toChordPitches.size(); i++ ) {
+		pitchChange[i] -= fromChordPitches[i];
+	}
+
+	float meanPitchChange = 0.f;
+	float stdDevPitchChange = 0.f;
+	meanStandardDeviation(pitchChange, meanPitchChange, stdDevPitchChange);
+
+	float minAbsChange = FLT_MAX;
+	for( unsigned int i = 0; i < pitchChange.size(); i++ ) {
+		minAbsChange = std::min(minAbsChange, abs(pitchChange[i]));
+	}
+	bool anyNotesSame = (minAbsChange < 1.f / 12.f / 5.f);	// Difference less than 5th of a semitone
+
+	std::vector<float> result;
+	if( jumbleMode ) {
+		// It is essential (so far as possible) that no notes stay the same
+		result.push_back(anyNotesSame ? 0.f : 1.f);		// Primary score, prefer no notes the same
+		// It is intended that notes change by different amounts
+		result.push_back(stdDevPitchChange);
+		// If further sorting is required, we'd prefer mapppings where the minimum delta is large
+		result.push_back(minAbsChange);
+	} else {
+		// Largely we want the inverse of "jumbling" to be the opposite extreme. So we negate the above
+		// BUT we still want to avoid any notes staying the same
+		result.push_back(anyNotesSame ? 0.f : 1.f);		// Primary score, still prefer no notes the same; Don't negate
+		result.push_back(-stdDevPitchChange);
+		result.push_back(-minAbsChange);
+	}
+	return result;
+}
+
+bool vectorABeatsB(std::vector<float> A, std::vector<float> B)
+{
+	assert( A.size() == B.size() );
+
+	for( unsigned int i = 0; i < A.size(); i++ ) {
+		if( A[i] > B[i] ) {
+			return true;
+		} else if( A[i] < B[i] ) {
+			return false;
+		}
+		// so we have A[i] == B[i]
+	}
+	return false;	// Vectors are equal
+}
+
+std::vector<float> jumbleChord(const std::vector<float> &toChordPitches, const std::vector<float> &fromChordPitches, bool jumbleMode)
 {
 	assert(toChordPitches.size() == fromChordPitches.size());
 
@@ -151,19 +187,17 @@ std::vector<float> jumbleChord(std::vector<float> toChordPitches, std::vector<fl
 	std::sort(candidateToPitches.begin(), candidateToPitches.end());
 
 	// We assess the lexicographically first permutation
-	std::pair<float, float> bestPrimarySecondaryScore = primarySecondaryScore(candidateToPitches, fromChordPitches, jumbleMode);
+	std::vector<float> bestScore = primarySecondaryTertiaryScore(candidateToPitches, fromChordPitches, jumbleMode);
 	// So far (out of a count of one!) it's the best permutation we have
 	std::vector<float> bestPermutation = candidateToPitches;
 
 	do {
 		// Process current permutation
-		std::pair<float,float> currentPrimarySecondaryScore = primarySecondaryScore(candidateToPitches, fromChordPitches, jumbleMode);
-		if (currentPrimarySecondaryScore.first > bestPrimarySecondaryScore.first
-			|| ( (currentPrimarySecondaryScore.first == bestPrimarySecondaryScore.first)
-				&& (currentPrimarySecondaryScore.second > bestPrimarySecondaryScore.second) ) ) {
-			bestPrimarySecondaryScore = currentPrimarySecondaryScore;
+		std::vector<float> currentPrimarySecondaryScore = primarySecondaryTertiaryScore(candidateToPitches, fromChordPitches, jumbleMode);
+		if( vectorABeatsB(currentPrimarySecondaryScore, bestScore) ) {
+			bestScore = currentPrimarySecondaryScore;
 			bestPermutation = candidateToPitches;
-				}
+		}
 	} while (std::next_permutation(candidateToPitches.begin(), candidateToPitches.end()));
 
 	return bestPermutation;
@@ -332,9 +366,6 @@ struct ChordRollover : Module {
 		y = (y-0.5f) * 2.f;
 		float modifiedProgress = y;
 
-		// Light up the "Rollover" LED in a linear way based on progress instead of a fixed length pulse
-		lights[ROLLOVER_LIGHT].setBrightness(1.f - progress);
-
 		// Interpolate between fromPitches (progress==0) and toPitches (progress==1)
 		std::vector<float> pitches;
 		for( unsigned int i=0; i<fromPitches.size(); i++ ) {
@@ -413,6 +444,7 @@ struct ChordRollover : Module {
 			fromPitches = pitches;
 			playChord(fromPitches);
 			timerTarget = 0;		// Indicate "no current slide"
+			lights[ROLLOVER_LIGHT].setBrightness(0.f);
 		} else if ( rollover ) {
 			// User has "rolled over" from one key to another, initiating a portamento glide
 
@@ -426,6 +458,7 @@ struct ChordRollover : Module {
 				// Start the new slide from wherever we'd got to so far.
 				float progress = ((float)(timerSamples)) / timerTarget;
 				fromPitches = interpolatePitches(progress);
+				std::sort(fromPitches.begin(), fromPitches.end());	// Seems sensible in the face of a slight bug
 				abortedPreviousGlide = true;
 			} else {
 				// We're sliding from a previously steady chord
@@ -450,15 +483,19 @@ struct ChordRollover : Module {
 
 		if( timerTarget==0 ) {
 			// No current glide
+			lights[ROLLOVER_LIGHT].setBrightness(0.f);
 		} else if( timerSamples < timerTarget ) {
 			// Mid glide
 			timerSamples++;
 			float progress = ((float)(timerSamples)) / timerTarget;
 			std::vector<float> interPitches = interpolatePitches(progress);
 			playChord(interPitches);
+			// Light up the "Rollover" LED in a kinda linear way based on progress instead of a fixed length pulse
+			lights[ROLLOVER_LIGHT].setBrightness(1.f/3.f + 2.f * (1.f - progress)/3.f);
 		} else if( timerSamples == timerTarget ) {
 			// End point of glide. From now, act like this "always was" a flat unglided chord
 			fromPitches = toPitches;
+			std::sort(fromPitches.begin(), fromPitches.end());	// Seems sensible in the face of a slight bug
 			timerTarget = 0;
 		}
 
