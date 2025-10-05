@@ -127,8 +127,37 @@ void meanStandardDeviation(const std::vector<float>& data, float &mean, float &s
 	stdDev = sqrt(variance);
 }
 
-// A primary and secondary score for comparing "jumbleness" of chord mappings. Biggest score wins.
-std::vector<float> primarySecondaryTertiaryScore(const std::vector<float>& toChordPitches, const std::vector<float>& fromChordPitches, bool jumbleMode)
+// A primary and secondary score for comparing "jumbledness" of chord mappings.
+class JumbleScore
+{
+	private:
+		int m_permutationIndex;
+		bool m_pleaseAvoid;		// True if this jumbling is to be avoided due to a note not changing
+		float m_primaryScore;
+		float m_secondaryScore;
+	public:
+		JumbleScore(int permutationIndex, float primaryScore, float secondaryScore, bool pleaseAvoid)
+		: m_permutationIndex(permutationIndex)
+		, m_pleaseAvoid(pleaseAvoid)
+		, m_primaryScore(primaryScore)
+		, m_secondaryScore(secondaryScore)
+		{
+		}
+		bool PleaseAvoid() {return m_pleaseAvoid;}
+		int PermutationIndex() {return m_permutationIndex;}
+		bool operator<(const JumbleScore &other)
+		{
+			if(m_primaryScore < other.m_primaryScore) {return true;}
+			if(m_primaryScore > other.m_primaryScore) {return false;}
+			if(m_secondaryScore < other.m_secondaryScore) {return true;}
+			return false;
+		}
+};
+
+// Biggest score is most jumbled, with primary score in result[0] and secondary score in result[1].
+// result[2] is important - it is 1.f to indicate that the mapping contains a note that does not
+// change (0.f otherwise). If result[2] is 1.f, reserve it for emergencies when no vectors include result[2] = 0.f!
+JumbleScore jumblednessScore(int permutationIndex, const std::vector<float>& toChordPitches, const std::vector<float>& fromChordPitches)
 {
 	std::vector<float> pitchChange = toChordPitches;
 	for( unsigned int i = 0; i < toChordPitches.size(); i++ ) {
@@ -145,37 +174,7 @@ std::vector<float> primarySecondaryTertiaryScore(const std::vector<float>& toCho
 	}
 	bool anyNotesSame = (minAbsChange < 1.f / 12.f / 5.f);	// Difference less than 5th of a semitone
 
-	std::vector<float> result;
-	if( jumbleMode ) {
-		// It is essential (so far as possible) that no notes stay the same
-		result.push_back(anyNotesSame ? 0.f : 1.f);		// Primary score, prefer no notes the same
-		// It is intended that notes change by different amounts
-		result.push_back(stdDevPitchChange);
-		// If further sorting is required, we'd prefer mapppings where the minimum delta is large
-		result.push_back(minAbsChange);
-	} else {
-		// Largely we want the inverse of "jumbling" to be the opposite extreme. So we negate the above
-		// BUT we still want to avoid any notes staying the same
-		result.push_back(anyNotesSame ? 0.f : 1.f);		// Primary score, still prefer no notes the same; Don't negate
-		result.push_back(-stdDevPitchChange);
-		result.push_back(-minAbsChange);
-	}
-	return result;
-}
-
-bool vectorABeatsB(std::vector<float> A, std::vector<float> B)
-{
-	assert( A.size() == B.size() );
-
-	for( unsigned int i = 0; i < A.size(); i++ ) {
-		if( A[i] > B[i] ) {
-			return true;
-		} else if( A[i] < B[i] ) {
-			return false;
-		}
-		// so we have A[i] == B[i]
-	}
-	return false;	// Vectors are equal
+	return JumbleScore(permutationIndex, stdDevPitchChange, minAbsChange, anyNotesSame);
 }
 
 std::vector<float> jumbleChord(const std::vector<float> &toChordPitches, const std::vector<float> &fromChordPitches, bool jumbleMode)
@@ -186,21 +185,46 @@ std::vector<float> jumbleChord(const std::vector<float> &toChordPitches, const s
 	// Important: sort it first, to get the lexicographically smallest permutation
 	std::sort(candidateToPitches.begin(), candidateToPitches.end());
 
-	// We assess the lexicographically first permutation
-	std::vector<float> bestScore = primarySecondaryTertiaryScore(candidateToPitches, fromChordPitches, jumbleMode);
-	// So far (out of a count of one!) it's the best permutation we have
-	std::vector<float> bestPermutation = candidateToPitches;
+	// We gather a score for every permutation, each in either "allowed" or "avoidable" vectors
+	std::vector<JumbleScore> allowedScores;
+	std::vector<JumbleScore> avoidableScores;
 
+	int permutationIndex = 0;
 	do {
-		// Process current permutation
-		std::vector<float> currentPrimarySecondaryScore = primarySecondaryTertiaryScore(candidateToPitches, fromChordPitches, jumbleMode);
-		if( vectorABeatsB(currentPrimarySecondaryScore, bestScore) ) {
-			bestScore = currentPrimarySecondaryScore;
-			bestPermutation = candidateToPitches;
+		JumbleScore score = jumblednessScore(permutationIndex, candidateToPitches, fromChordPitches);
+		if( score.PleaseAvoid() ) {
+			avoidableScores.push_back(score);
+		} else {
+			allowedScores.push_back(score);
 		}
+		permutationIndex++;
 	} while (std::next_permutation(candidateToPitches.begin(), candidateToPitches.end()));
 
-	return bestPermutation;
+	int chosenPermutationIndex = -1;
+	if( allowedScores.size() > 0 ) {
+		// Choose first or last based on jumbleMode
+		int last = allowedScores.size() - 1;
+		std::sort(allowedScores.begin(), allowedScores.end());
+		if( jumbleMode ) {
+			chosenPermutationIndex = allowedScores[last].PermutationIndex();
+		} else {
+			chosenPermutationIndex = allowedScores[0].PermutationIndex();
+		}
+	} else {
+		// Not ideal, but resort to PleaseAvoid permutations
+		int last = avoidableScores.size() - 1;
+		std::sort(avoidableScores.begin(), avoidableScores.end());
+		if( jumbleMode ) {
+			chosenPermutationIndex = avoidableScores[last].PermutationIndex();
+		} else {
+			chosenPermutationIndex = avoidableScores[0].PermutationIndex();
+		}
+	}
+	// candidateToPitches() was reverted to the first lexicographical order at the end of the above loop
+	for( int i=0; i<chosenPermutationIndex; i++ ) {
+		std::next_permutation(candidateToPitches.begin(), candidateToPitches.end());
+	}
+	return candidateToPitches;
 }
 
 void runTests()
