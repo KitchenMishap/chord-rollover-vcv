@@ -535,7 +535,7 @@ struct ChordRollover : Module {
 struct ChordRolloverWidget : ModuleWidget {
 	ChordRolloverWidget(ChordRollover* module) {
 		setModule(module);
-		setPanel(createPanel(asset::plugin(pluginInstance, "res/Panel.svg")));
+		setPanel(createPanel(asset::plugin(pluginInstance, "res/GeneratedPanelPaths.svg")));
 
 		float width = 5.08 * 6;
 		float col1 = 5.08 * 1.5;
