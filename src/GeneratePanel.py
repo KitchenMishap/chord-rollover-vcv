@@ -78,7 +78,7 @@ with open('res\\GeneratedPanel.svg', 'w') as file:
     file.write('       </text>\n')
     file.write('    <text\n')
     file.write('       x="23"\n')
-    file.write('       y="93"\n')
+    file.write('       y="92"\n')
     file.write('       style="font-size:0.8mm;text-anchor:middle;fill:#000000">\n')
     file.write('       GATE\n')
     file.write('       </text>\n')
