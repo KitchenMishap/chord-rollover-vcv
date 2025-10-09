@@ -21,13 +21,12 @@ DISTRIBUTABLES += $(wildcard presets)
 
 # Generate SVG panel before building
 # Generate intermediate SVG with text, then convert text to paths
-res/GeneratedPanel.svg: src/GeneratePanel.py
+res/GeneratedPanelPaths.svg: src/GeneratePanel.py
 	python src/GeneratePanel.py
 	inkscape res/GeneratedPanel.svg --export-text-to-path --export-plain-svg --export-filename=res/GeneratedPanelPaths.svg
 
-
 # Make the generated SVG a dependency of the all target
-all: res/GeneratedPanel.svg
+all: res/GeneratedPanelPaths.svg
 
 # Include the Rack plugin Makefile framework
 include $(RACK_DIR)/plugin.mk
