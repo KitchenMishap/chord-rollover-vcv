@@ -1,22 +1,22 @@
 {
-  "slug": "ChordRolloverPlugin",
-  "name": "ChordRolloverPlugin",
+  "slug": "ToDoPlugin",
+  "name": "ToDoPluginPlugin",
   "version": "2.0.0",
   "license": "MIT",
   "brand": "Kitchen Mishap",
   "author": "Nigel Sharp",
   "authorEmail": "hello@kitchenmishap.art",
   "authorUrl": "www.kitchenmishap.art",
-  "pluginUrl": "github.com/KitchenMishap/chord-rollover-vcv",
-  "manualUrl": "github.com/KitchenMishap/chord-rollover-vcv",
-  "sourceUrl": "github.com/KitchenMishap/chord-rollover-vcv",
+  "pluginUrl": "github.com/KitchenMishap/ToDo",
+  "manualUrl": "github.com/KitchenMishap/ToDo",
+  "sourceUrl": "github.com/KitchenMishap/ToDo",
   "donateUrl": "",
   "changelogUrl": "",
   "modules": [
     {
-      "slug": "ChordRollover",
-      "name": "ChordRollover",
-      "description": "Generates chord pitches in a keysig from a mono pitch with keypress rollover portamento slide",
+      "slug": "ToDo",
+      "name": "ToDo",
+      "description": "ToDo",
       "tags": [
         "polyphonic"
       ]
